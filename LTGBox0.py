@@ -287,10 +287,11 @@ def downloadResource():
         _thread.start_new_thread(downloadResource,())
 
 # 播放MP3       
-# pip3 install playsound
-# https://ss64.com/osx/afplay.html
-def playMusic(filename):
-    os.system('afplay -q 1 "'+filename+'"') 
+def playMusic(audiocard,filename):
+    if audiocard is None or audiocard=='':
+        os.system('mpg321 "'+filename+'"') 
+    else:
+        os.system('mpg321 -o alsa -a '+audiocard +' "'+filename+'"') 
 
 def getDevicePlaylist(deviceInfo):
     session3 = playlistdb.GetDbSession()
@@ -355,7 +356,7 @@ def playMediaWorker(deviceHost):
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
         localfilename = "resources"+mediafile.iotpath + mediafile.playlistid + mediafile.extension
-        _thread.start_new_thread(playMusic,(localfilename,))
+        _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
         pass
     mediafile.lastplaytime = datetime.datetime.now()
