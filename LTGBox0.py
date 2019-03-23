@@ -14,6 +14,8 @@ import _thread
 import schedule
 import dlnap
 import socket
+import signal
+import psutil
 import urllib.parse
 from urllib.request import urlopen
 from flask import Flask, url_for,jsonify
@@ -22,10 +24,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 from sqlalchemy import and_,or_,desc,asc
+import logging
+import logging.config
 
 # 初始化工作，获取配置
 shopDevices = []
-#deletedDevices = []
 playlistURI = ''
 resourceHost = ''
 localHttpHost = ''
@@ -37,6 +40,26 @@ _version_ = '0.1.2'
 _configfile_ = 'ltgbox.conf'
 config = configparser.ConfigParser()
 sys_updating = False
+stopApp = False
+
+#
+# Signal of Ctrl+C
+# =================================================================================================
+def signal_handler(signal, frame):
+   logger.info(' Got Ctrl + C, exit now!')
+   sys.exit(1)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+#必要的目录
+if os.path.exists('./resources') == False:
+    os.mkdir('resources')
+
+if os.path.exists('./log') == False:
+    os.mkdir('log')
+
+logging.config.fileConfig(fname='logger.conf', disable_existing_loggers=False)
+logger = logging.getLogger("mainlog")
 
 def initConfig():
     config["server"] = {
@@ -64,7 +87,7 @@ if os.path.exists(_configfile_) == False:
 
 #载入配置。
 def loadConfig():
-    print("载入配置")
+    logger.info("载入配置")
     config.read(_configfile_)
     global _sn_  
     _sn_ = config.get("device","sn")
@@ -96,9 +119,6 @@ def loadConfig():
 #定时检查DLNA设备
 def scanDLNADevices():
     os.system(pycmd + " ./dlnap.py")
-
-if os.path.exists('./resources') == False:
-    os.mkdir('resources')
 
 #保存配置
 def savePlayersConfig():
@@ -144,9 +164,9 @@ def resourceItemWorker(iotPath,resourceList):
                 elif existitem.status in (1,20):
                     existitem.status = 0
                 session.commit()
-                print("资源" + item_filename + "(" + item_id + ")已注册")
+                logger.info("资源" + item_filename + "(" + item_id + ")已注册")
         except:
-            print("资源验证失败：" + item_filename + "(" + item_id + ")")
+            logger.warning("资源验证失败：" + item_filename + "(" + item_id + ")")
     return idlist
     
 
@@ -154,7 +174,7 @@ def resourceItemWorker(iotPath,resourceList):
 def playPlanWorker(playlistPlan):
     #检查是否已存在该资源
     item_iotpath = playlistPlan["iotpath"]
-    print("处理路径" + item_iotpath + "的资源。。。")
+    logger.info("处理路径" + item_iotpath + "的资源。。。")
     test = False
     for device in shopDevices:
         for selfIoTPath in device["path"]:
@@ -170,31 +190,31 @@ def playPlanWorker(playlistPlan):
         return
     playlistData = playlistPlan["playlist"]
     playlistIds = resourceItemWorker(item_iotpath,playlistData)
-    print("路径" + item_iotpath + "的资源处理完成")
+    logger.info("路径" + item_iotpath + "的资源处理完成")
     return playlistIds
 
 #检查播入列表更新。
 def checkPlayList(): 
-    print("获取资源数据，资源地址："+playlistURI)
+    logger.info("获取资源数据，资源地址："+playlistURI)
     if playlistURI == '':
-        print("未配置资料主机地址。")
+        logger.warning("未配置资料主机地址。")
         return
     #注册新文件
     try:
         confRequest = requests.get(playlistURI)
     except:
-        print("无法获取播放资源")
+        logger.error("无法获取播放资源")
         return
     playlistIds = []
     if confRequest.status_code == 200 :
-        print("资源单获取成功，进行验证")
+        logger.info("资源单获取成功，进行验证")
         jdata = json.loads(confRequest.text)
         for i in jdata:
             pfiles = playPlanWorker(i)
             if pfiles != None :
                 playlistIds = playlistIds + pfiles
     else:
-        print("资源单获取失败")
+        logger.warning("资源单获取失败")
     #处理已删除文件
     session = playlistdb.GetDbSession()
     notdelFiles = (session.query(playlistdb.PlayList)
@@ -206,23 +226,23 @@ def checkPlayList():
     isDirty = False
     for nf in notdelFiles:
         if nf.mediaid in diffFiles:
-            print(nf.filename + "文件标记为删除")
+            logger.info(nf.filename + "文件标记为删除")
             nf.status = 20
             isDirty = True
     if isDirty:
         session.commit()
     diffFiles = list(set(playlistIds).difference(set(nflist)))
-    print("资源检查完成")
+    logger.info("资源检查完成")
         
 # 下载数据库中未下载的资源
 def downloadResource():
-    print("查找需要下载的资源")
+    logger.info("查找需要下载的资源")
     session2 = playlistdb.GetDbSession()
     playlistTarget = (session2.query(playlistdb.PlayList)
         .filter(or_(playlistdb.PlayList.status == 10,playlistdb.PlayList.status == 11))
         .first())
     if playlistTarget != None :
-        print("资源" + playlistTarget.filename + "准备下载中...")
+        logger.info("资源" + playlistTarget.filename + "准备下载中...")
         url = resourceHost + urllib.parse.quote(playlistTarget.urlpath) + urllib.parse.quote(playlistTarget.filename)
         #本地文件夹
         localPath = sys.path[0] + "/resources" + playlistTarget.iotpath
@@ -234,7 +254,7 @@ def downloadResource():
         if os.path.exists(localFile) :
             finfo = os.stat(localFile)
             if finfo.st_size == playlistTarget.size :
-                print("文件" + playlistTarget.filename + "已存在，无需下载")
+                logger.info("文件" + playlistTarget.filename + "已存在，无需下载")
                 playlistTarget.status = 0
                 playlistTarget.modifiedon = datetime.datetime.now()
                 session2.commit()
@@ -245,7 +265,7 @@ def downloadResource():
                 try:
                     os.remove(localFile)
                 except:
-                    print("文件" + localFile + "已存在，下载未完成，但无法访问。")
+                    logger.warning("文件" + localFile + "已存在，下载未完成，但无法访问。")
                     time.sleep(5)
                     _thread.start_new_thread(downloadResource,())
                     return
@@ -254,7 +274,7 @@ def downloadResource():
             playlistTarget.status = 11
             playlistTarget.modifiedon = datetime.datetime.now()
             session2.commit()
-        print("资源下载" + playlistTarget.filename + ".请求：" + url)
+        logger.info("资源下载" + playlistTarget.filename + ".请求：" + url)
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
@@ -264,18 +284,18 @@ def downloadResource():
                         wfile.write(chunk)
                 wfile.close()
         except:
-            print("资源" + playlistTarget.filename + "下载发生错误")
+            logger.error("资源" + playlistTarget.filename + "下载发生错误")
             playlistTarget.status = 10
             playlistTarget.modifiedon = datetime.datetime.now()
             _thread.start_new_thread(downloadResource,())
             return
         finfo = os.stat(localFile)
         if finfo.st_size == playlistTarget.size :
-            print("资源" + playlistTarget.filename + "下载完成")
+            logger.info("资源" + playlistTarget.filename + "下载完成")
             playlistTarget.status = 0
             playlistTarget.modifiedon = datetime.datetime.now()
         else:
-            print("资源" + playlistTarget.filename + "下载失败")
+            logger.error("资源" + playlistTarget.filename + "下载失败")
             os.remove(localFile)
             playlistTarget.status = 10
             playlistTarget.modifiedon = datetime.datetime.now()
@@ -283,7 +303,7 @@ def downloadResource():
         time.sleep(1)
         _thread.start_new_thread(downloadResource,())
     else:  
-        print("没有需要下载的资源")
+        logger.info("没有需要下载的资源")
         time.sleep(60)
         _thread.start_new_thread(downloadResource,())
 
@@ -320,9 +340,9 @@ def playMediaWorker(deviceHost):
     if deviceInfo == None or deviceInfo["host"] != deviceHost:
         return
     if deviceInfo["state"] != "On":
-        print( deviceInfo["name"]+"设备已停用。")
+        logger.warning( deviceInfo["name"]+"设备已停用。")
         return
-    print("获取设备" + deviceInfo["host"] + "的播放列表")
+    logger.info("获取设备" + deviceInfo["host"] + "的播放列表")
     session3 = playlistdb.GetDbSession()
     mediafile = None
     if deviceInfo["type"] == "Video" :
@@ -341,7 +361,7 @@ def playMediaWorker(deviceHost):
             .first())
     
     if mediafile == None :
-        print("设备" + deviceInfo["host"] + "无可播放的媒体资源")
+        logger.info("设备" + deviceInfo["host"] + "无可播放的媒体资源")
         time.sleep(30)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
         return
@@ -349,16 +369,16 @@ def playMediaWorker(deviceHost):
     if threadDuration < 0:
         threadDuration = 0
 
-    print("播放媒体文件" + mediafile.filename + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
+    logger.info("播放媒体文件" + mediafile.filename + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
     if deviceInfo["protocol"] == "DLNA":
         localfilename ="http://" +localHttpHost +":" +localHttpPort +mediafile.iotpath + mediafile.playlistid + mediafile.extension
         playCmd = pycmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
-        print("执行：" + playCmd)
+        logger.info("执行：" + playCmd)
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
         threadDuration +=2
         localfilename = "resources"+mediafile.iotpath + mediafile.playlistid + mediafile.extension
-        print("本机声卡播放："+localfilename)
+        logger.info("本机声卡播放："+localfilename)
         _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
         pass
@@ -376,7 +396,7 @@ def iot_alive_report():
         hostname = socket.gethostname()    
         IPAddr = socket.gethostbyname(hostname)
     except:
-        print('心跳报告,获取主机IP失败。')
+        logger.error('心跳报告,获取主机IP失败。')
         return
     aliveInfo ={
         'skey' : config.get("device","skey"),
@@ -385,9 +405,9 @@ def iot_alive_report():
     reqUrl = config.get('server','discover_uri')+'/iot/alive/'+deviceSN
     try:
         response = requests.post(reqUrl,data=aliveInfo)
-        print('完成报告。')
+        logger.info('完成报告。')
     except:
-        print('心跳报告失败。')
+        logger.error('心跳报告失败。')
     return
 
 def thread_checkPlayList():
@@ -465,7 +485,7 @@ def api_device_all():
         for d in deletedDevices:
             if d["type"] == "Video" and d["protocol"]=="DLNA":
                 playCmd = pycmd + " ./dlnap.py --ip " + d["host"] + " --stop"
-                print("执行：" + playCmd)
+                logger.info("执行：" + playCmd)
                 os.system(playCmd)
         return Response(status=200) 
     elif request.method == 'GET':
@@ -481,26 +501,42 @@ def api_ltgbox_config_node():
         nodesObj[n[0]]=n[1]
     return json.dumps(nodesObj)
 
+def startLTGBoxApp():
+    global stopApp 
+    if stopApp:
+        return
+    logger.info('重启应用')
+    restartbox = pycmd+' LTGBox0.py'
+    os.system(restartbox)
+    stopApp = True
+
 def updateDevice():
     global sys_updating
     if sys_updating:
         return json.dumps({"error":"Sys is updating"})
-    sys_updating = True
-    gitPullCmd = 'git pull'
-    os.system(gitPullCmd)
-    restartCmd = pycmd+' LTGBox0.py'
-    os.system(restartCmd)
-    sys_updating = False
-    sys.exit()
+    try:
+        sys_updating = True
+        gitPullCmd = 'git pull'
+        os.system(gitPullCmd)
+    finally:
+        sys_updating = False
+    _thread.start_new_thread(startLTGBoxApp,())
+
+@app.route('/api/ltgbox/restart',methods=['POST'])
+def api_ltgbox_restart():
+    _thread.start_new_thread(startLTGBoxApp,())
+    return Response(status=200) 
 
 #升级设备
 @app.route('/api/ltgbox/update',methods=['POST'])
 def device_software_update():
-    updateDevice()
+    logger.info("收到升级请求，开始执行升级")
+    _thread.start_new_thread(updateDevice)
     return Response(status=200) 
 
 
 def runWebApp():
+    time.sleep(15)
     app.run(host='0.0.0.0', port=5604)
 
 def checkUpdate():
@@ -524,7 +560,9 @@ def BackgroupTask():
     for d in shopDevices:
         if d["state"] == "On":
             _thread.start_new_thread(playMediaWorker,(d["host"],))
-    while True:
+            pass
+    global stopApp
+    while not stopApp:
         schedule.run_pending()
         time.sleep(1)
 
@@ -534,6 +572,8 @@ if __name__ == '__main__':
     scanDLNADevices()
     _thread.start_new_thread(BackgroupTask,())
     _thread.start_new_thread(runWebApp,())
-    while True:
+    while not stopApp:
         time.sleep(1)
         pass
+    logger.info("应用将在10秒后关闭")
+    time.sleep(10)
