@@ -386,12 +386,24 @@ def iot_alive_report():
     except:
         print('心跳报告失败。')
     return
+
+def thread_checkPlayList():
+    _thread.start_new_thread(checkPlayList,())
+
+def thread_iot_aliveReport():
+    _thread.start_new_thread(iot_alive_report,())
+
+def thread_scanDLNADevices():
+    _thread.start_new_thread(scanDLNADevices,())
  
 def BackgroupTask():
-    _thread.start_new_thread(checkPlayList,())
-    schedule.every(20).seconds.do(checkPlayList)
-    schedule.every(30).seconds.do(iot_alive_report)
-    schedule.every(5).minutes.do(scanDLNADevices)
+
+    thread_checkPlayList()
+    schedule.every(20).seconds.do(thread_checkPlayList)
+    thread_iot_aliveReport()
+    schedule.every(30).seconds.do(thread_iot_aliveReport)
+    thread_scanDLNADevices()
+    schedule.every(5).minutes.do(thread_scanDLNADevices)
     _thread.start_new_thread(downloadResource,())
     for d in shopDevices:
         if d["state"] == "On":
