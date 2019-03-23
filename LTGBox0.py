@@ -497,6 +497,8 @@ def updateDevice():
 @app.route('/api/ltgbox/update',methods=['POST'])
 def device_software_update():
     updateDevice()
+    return Response(status=200) 
+
 
 def runWebApp():
     app.run(host='0.0.0.0', port=5604)
