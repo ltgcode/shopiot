@@ -15,7 +15,6 @@ import schedule
 import dlnap
 import socket
 import signal
-import psutil
 import urllib.parse
 from urllib.request import urlopen
 from flask import Flask, url_for,jsonify
