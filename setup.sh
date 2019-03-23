@@ -1,3 +1,6 @@
+#apt package
+apt-get install mpg321
+
 #init pip3
 pip3 install requests
 pip3 install sqlalchemy

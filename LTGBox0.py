@@ -355,7 +355,9 @@ def playMediaWorker(deviceHost):
         print("执行：" + playCmd)
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
+        threadDuration +=2
         localfilename = "resources"+mediafile.iotpath + mediafile.playlistid + mediafile.extension
+        print("本机声卡播放："+localfilename)
         _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
         pass
