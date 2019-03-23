@@ -33,9 +33,10 @@ useLocalHost = False
 localHttpPort = '8001'
 pycmd = 'python'
 _sn_ = '000'
-_version_ = '0.1.0'
+_version_ = '0.1.2'
 _configfile_ = 'ltgbox.conf'
 config = configparser.ConfigParser()
+sys_updating = False
 
 def initConfig():
     config["server"] = {
@@ -397,22 +398,6 @@ def thread_iot_aliveReport():
 
 def thread_scanDLNADevices():
     _thread.start_new_thread(scanDLNADevices,())
- 
-def BackgroupTask():
-
-    thread_checkPlayList()
-    schedule.every(20).seconds.do(thread_checkPlayList)
-    thread_iot_aliveReport()
-    schedule.every(30).seconds.do(thread_iot_aliveReport)
-    thread_scanDLNADevices()
-    schedule.every(5).minutes.do(thread_scanDLNADevices)
-    _thread.start_new_thread(downloadResource,())
-    for d in shopDevices:
-        if d["state"] == "On":
-            _thread.start_new_thread(playMediaWorker,(d["host"],))
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
 
 	
 #获取程序名称和版本号
@@ -496,9 +481,50 @@ def api_ltgbox_config_node():
         nodesObj[n[0]]=n[1]
     return json.dumps(nodesObj)
 
+def updateDevice():
+    global sys_updating
+    if sys_updating:
+        return json.dumps({"error":"Sys is updating"})
+    sys_updating = True
+    gitPullCmd = 'git pull'
+    os.system(gitPullCmd)
+    restartCmd = pycmd+' LTGBox0.py'
+    os.system(restartCmd)
+    sys_updating = False
+    sys.exit()
+
+#升级设备
+@app.route('/api/ltgbox/update',methods=['POST'])
+def device_software_update():
+    updateDevice()
+
 def runWebApp():
     app.run(host='0.0.0.0', port=5604)
 
+def checkUpdate():
+    _thread.start_new_thread(updateDevice)
+ 
+#启动所有异步线程
+def BackgroupTask():
+    #检查媒体资源列表
+    thread_checkPlayList()
+    schedule.every(180).seconds.do(thread_checkPlayList)
+    #心跳报告
+    thread_iot_aliveReport()
+    schedule.every(30).seconds.do(thread_iot_aliveReport)
+    #DLNA设备查找
+    thread_scanDLNADevices()
+    schedule.every(10).minutes.do(thread_scanDLNADevices)
+    #资源下载任务
+    _thread.start_new_thread(downloadResource,())
+    #定时检查升级
+    schedule.every().day.at("02:00").do(checkUpdate)
+    for d in shopDevices:
+        if d["state"] == "On":
+            _thread.start_new_thread(playMediaWorker,(d["host"],))
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 if __name__ == '__main__':
     #配置初始化
