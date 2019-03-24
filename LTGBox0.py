@@ -27,19 +27,21 @@ import logging
 import logging.config
 
 # 初始化工作，获取配置
-shopDevices = []
-playlistURI = ''
-resourceHost = ''
-localHttpHost = ''
-useLocalHost = False
-localHttpPort = '8001'
-pycmd = 'python'
+ShopDevices= []
+PlaylistURI = ''
+ResourceHost = ''
+LocalHttpHost = ''
+UseLocalHost = False
+LocalHttpPort = '8001'
+PyCmd = 'python'
 _sn_ = '000'
-_version_ = '0.1.2'
+_version_ = '0.1.3'
 _configfile_ = 'ltgbox.conf'
-config = configparser.ConfigParser()
-sys_updating = False
-stopApp = False
+Config = configparser.ConfigParser()
+SysUpdating = False
+StopApp = False
+PlayListSet = {}
+
 
 #
 # Signal of Ctrl+C
@@ -61,7 +63,7 @@ logging.config.fileConfig(fname='logger.conf', disable_existing_loggers=False)
 logger = logging.getLogger("mainlog")
 
 def initConfig():
-    config["server"] = {
+    Config["server"] = {
         'discover_uri':'',
         'playlist_uri':'',
         'resource_host':'',
@@ -70,16 +72,16 @@ def initConfig():
         'uselocalhost':'False',
         'pycmd' :'python3'
     }
-    config["device"]={
+    Config["device"]={
         'sn' :'',
         'skey':'',
         'mkey':''
     }
-    config["players"]={
+    Config["players"]={
         'BoxAudioCard' : '{"name": "BoxAudioCard", "host": "127.0.0.1", "type": "Audio", "protocol": "AudioCard", "state": "On", "path": ["/"]}'
     }
     with open(_configfile_, 'w') as configfile:
-        config.write(configfile)
+        Config.write(configfile)
 
 if os.path.exists(_configfile_) == False:
     initConfig()
@@ -87,47 +89,47 @@ if os.path.exists(_configfile_) == False:
 #载入配置。
 def loadConfig():
     logger.info("载入配置")
-    config.read(_configfile_)
+    Config.read(_configfile_)
     global _sn_  
-    _sn_ = config.get("device","sn")
-    global playlistURI
-    playlistURI = config.get("server","playlist_uri")
-    global resourceHost
-    resourceHost = config.get("server","resource_host")
-    global useLocalHost
-    useLocalHost = config.get("server","useLocalHost") == "True"
-    global localHttpHost
-    if useLocalHost:
-        localHttpHost = config.get("server","localHttpHost")
+    _sn_ = Config.get("device","sn")
+    global PlaylistURI
+    PlaylistURI = Config.get("server","playlist_uri")
+    global ResourceHost
+    ResourceHost = Config.get("server","resource_host")
+    global UseLocalHost
+    UseLocalHost = Config.get("server","useLocalHost") == "True"
+    global LocalHttpHost
+    if UseLocalHost:
+        LocalHttpHost = Config.get("server","localHttpHost")
     else:
         try:
             hostname = socket.gethostname()    
             IPAddr = socket.gethostbyname(hostname)
-            localHttpHost = IPAddr 
+            LocalHttpHost = IPAddr 
         except:
-            localHttpHost = config.get("server","localHttpHost")
-    global localHttpPort
-    useLocalHost = config.get("server","localHttpPort")
-    global pycmd
-    pycmd = config.get("server","pycmd")
-    global shopDevices
-    for player in config.items('players'):
+            LocalHttpHost = Config.get("server","localHttpHost")
+    global LocalHttpPort
+    UseLocalHost = Config.get("server","localHttpPort")
+    global PyCmd
+    PyCmd = Config.get("server","pycmd")
+    global ShopDevices
+    for player in Config.items('players'):
         playerconfig = json.loads(player[1])
-        shopDevices.append(playerconfig)
+        ShopDevices.append(playerconfig)
 
 #定时检查DLNA设备
 def scanDLNADevices():
-    os.system(pycmd + " ./dlnap.py")
+    os.system(PyCmd + " ./dlnap.py")
 
 #保存配置
 def savePlayersConfig():
-    config.read(_configfile_)
-    config.remove_section("players")
-    config.add_section("players")
-    for dinfo in shopDevices:
-        config.set("players",dinfo["name"],json.dumps(dinfo))
+    Config.read(_configfile_)
+    Config.remove_section("players")
+    Config.add_section("players")
+    for dinfo in ShopDevices:
+        Config.set("players",dinfo["name"],json.dumps(dinfo))
     with open(_configfile_, 'w') as f:
-        config.write(f)
+        Config.write(f)
 
 def resourceItemWorker(iotPath,resourceList):
     session = playlistdb.GetDbSession()
@@ -175,7 +177,7 @@ def playPlanWorker(playlistPlan):
     item_iotpath = playlistPlan["iotpath"]
     logger.info("处理路径" + item_iotpath + "的资源。。。")
     test = False
-    for device in shopDevices:
+    for device in ShopDevices:
         for selfIoTPath in device["path"]:
             if selfIoTPath == '' :
                 continue
@@ -194,13 +196,13 @@ def playPlanWorker(playlistPlan):
 
 #检查播入列表更新。
 def checkPlayList(): 
-    logger.info("获取资源数据，资源地址："+playlistURI)
-    if playlistURI == '':
+    logger.info("获取资源数据，资源地址："+PlaylistURI)
+    if PlaylistURI == '':
         logger.warning("未配置资料主机地址。")
         return
     #注册新文件
     try:
-        confRequest = requests.get(playlistURI)
+        confRequest = requests.get(PlaylistURI)
     except:
         logger.error("无法获取播放资源")
         return
@@ -231,6 +233,7 @@ def checkPlayList():
     if isDirty:
         session.commit()
     diffFiles = list(set(playlistIds).difference(set(nflist)))
+    loadPlaylist()
     logger.info("资源检查完成")
         
 # 下载数据库中未下载的资源
@@ -242,7 +245,7 @@ def downloadResource():
         .first())
     if playlistTarget != None :
         logger.info("资源" + playlistTarget.filename + "准备下载中...")
-        url = resourceHost + urllib.parse.quote(playlistTarget.urlpath) + urllib.parse.quote(playlistTarget.filename)
+        url = ResourceHost + urllib.parse.quote(playlistTarget.urlpath) + urllib.parse.quote(playlistTarget.filename)
         #本地文件夹
         localPath = sys.path[0] + "/resources" + playlistTarget.iotpath
         if os.path.exists(localPath) == False:
@@ -293,6 +296,7 @@ def downloadResource():
             logger.info("资源" + playlistTarget.filename + "下载完成")
             playlistTarget.status = 0
             playlistTarget.modifiedon = datetime.datetime.now()
+            loadPlaylist()
         else:
             logger.error("资源" + playlistTarget.filename + "下载失败")
             os.remove(localFile)
@@ -313,27 +317,57 @@ def playMusic(audiocard,filename):
     else:
         os.system('mpg321 -o alsa -a '+audiocard +' "'+filename+'"') 
 
-def getDevicePlaylist(deviceInfo):
-    session3 = playlistdb.GetDbSession()
-    playlist = []
-    if deviceInfo["type"] == "Video" :
-        playlist = (session3.query(playlistdb.PlayList)
+#清理资源文件
+def removeResourceFiles():
+    pass
+
+#载入节目单
+def loadPlaylist():
+    session = playlistdb.GetDbSession()
+    global PlayListSet
+    playlist = (session.query(playlistdb.PlayList)
             .filter(playlistdb.PlayList.status == 0)
-            .filter(or_(playlistdb.PlayList.mediatype == "Video",playlistdb.PlayList.mediatype == "Image"))
-            .filter(playlistdb.PlayList.iotpath.in_(deviceInfo["path"]))
-            .order_by(asc(playlistdb.PlayList.lastplaytime)))
-    elif deviceInfo["type"] == "Audio" :
-        playlist = (session3.query(playlistdb.PlayList)
-            .filter(playlistdb.PlayList.status == 0)
-            .filter(playlistdb.PlayList.mediatype == "Audio")
-            .filter(playlistdb.PlayList.iotpath.in_(deviceInfo["path"]))
-            .order_by(asc(playlistdb.PlayList.lastplaytime)))
-    return playlist
-    
+            .order_by(playlistdb.PlayList.filename))
+    for dev in ShopDevices:
+        devPlaylist = None
+        if dev["host"] not in PlayListSet:
+            PlayListSet[dev["host"]] = {'lastIndex':0,'playlist':[]}
+        devPlaylist = PlayListSet[dev["host"]]
+        newplaylist = []
+        for mfile in playlist:
+            if mfile.iotpath not in dev["path"]:
+                continue
+            if (dev["type"] == "Video" and mfile.mediatype not in ('Video','Image')) or \
+                (dev["type"] == "Audio" and mfile.mediatype not in ('Audio')):
+                continue
+            newplaylist.append({
+                'id':mfile.playlistid, 
+                'filename':mfile.filename,
+                'iotpath':mfile.iotpath,
+                'extension':mfile.extension,
+                'duration':mfile.duration})
+        logger.info(dev["name"]+"节目单："+ json.dumps(newplaylist))
+        devPlaylist["playlist"] = newplaylist
+
+#获取设备要播放的下一个节目
+def getNextMediaFile(devHost):
+    if devHost not in PlayListSet:
+        return
+    devPlaylistInfo = PlayListSet[devHost]
+    currIndex = devPlaylistInfo["lastIndex"]
+    devPlaylist = devPlaylistInfo["playlist"]
+    if len(devPlaylist) == 0:
+        return None
+    nextIndex = currIndex +1
+    if nextIndex >= len(devPlaylist):
+        nextIndex = 0
+    devPlaylistInfo["lastIndex"] = nextIndex
+    return devPlaylist[nextIndex]
+
 #设备播放线程
 def playMediaWorker(deviceHost):
     deviceInfo = None
-    for dev in shopDevices:
+    for dev in ShopDevices:
         if dev["host"] == deviceHost:
             deviceInfo = dev
     if deviceInfo == None or deviceInfo["host"] != deviceHost:
@@ -342,55 +376,46 @@ def playMediaWorker(deviceHost):
         logger.warning( deviceInfo["name"]+"设备已停用。")
         return
     logger.info("获取设备" + deviceInfo["host"] + "的播放列表")
-    session3 = playlistdb.GetDbSession()
-    mediafile = None
-    if deviceInfo["type"] == "Video" :
-        mediafile = (session3.query(playlistdb.PlayList)
-            .filter(playlistdb.PlayList.status == 0)
-            .filter(or_(playlistdb.PlayList.mediatype == "Video",playlistdb.PlayList.mediatype == "Image"))
-            .filter(playlistdb.PlayList.iotpath.in_(deviceInfo["path"]))
-            .order_by(asc(playlistdb.PlayList.lastplaytime))
-            .first())
-    elif deviceInfo["type"] == "Audio" :
-        mediafile = (session3.query(playlistdb.PlayList)
-            .filter(playlistdb.PlayList.status == 0)
-            .filter(playlistdb.PlayList.mediatype == "Audio")
-            .filter(playlistdb.PlayList.iotpath.in_(deviceInfo["path"]))
-            .order_by(asc(playlistdb.PlayList.lastplaytime))
-            .first())
     
+    mediafile = getNextMediaFile(deviceHost)
     if mediafile == None :
         logger.info("设备" + deviceInfo["host"] + "无可播放的媒体资源")
         time.sleep(30)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
         return
-    threadDuration = mediafile.duration / 1000 - 1
+    threadDuration = mediafile["duration"] / 1000 - 1
     if threadDuration < 0:
         threadDuration = 0
 
-    logger.info("播放媒体文件" + mediafile.filename + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
+    logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
     if deviceInfo["protocol"] == "DLNA":
-        localfilename ="http://" +localHttpHost +":" +localHttpPort +mediafile.iotpath + mediafile.playlistid + mediafile.extension
-        playCmd = pycmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
+        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort +mediafile["iotpath"] + mediafile["id"] + mediafile["extension"]
+        playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
         logger.info("执行：" + playCmd)
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
         threadDuration +=2
-        localfilename = "resources"+mediafile.iotpath + mediafile.playlistid + mediafile.extension
+        localfilename = "resources"+mediafile["iotpath"] + mediafile["id"] + mediafile["extension"]
         logger.info("本机声卡播放："+localfilename)
         _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
         pass
-    mediafile.lastplaytime = datetime.datetime.now()
-    mediafile.playcount = mediafile.playcount+1
-    mediafile.modifiedon = datetime.datetime.now()
-    session3.commit()
+
+    session = playlistdb.GetDbSession()
+    targetRow = (session.query(playlistdb.PlayList)
+                .filter(playlistdb.PlayList.playlistid == mediafile["id"])
+                .first())
+    if targetRow != None:
+        targetRow.lastplaytime = datetime.datetime.now()
+        targetRow.playcount = targetRow.playcount+1
+        targetRow.modifiedon = datetime.datetime.now()
+        session.commit()
     time.sleep(threadDuration)
     _thread.start_new_thread(playMediaWorker,(deviceHost,))
 
 
 def iot_alive_report():
-    deviceSN = config.get("device","sn")
+    deviceSN = Config.get("device","sn")
     try:
         hostname = socket.gethostname()    
         IPAddr = socket.gethostbyname(hostname)
@@ -398,12 +423,12 @@ def iot_alive_report():
         logger.error('心跳报告,获取主机IP失败。')
         return
     aliveInfo ={
-        'skey' : config.get("device","skey"),
+        'skey' : Config.get("device","skey"),
         'lan_ip' :IPAddr
     }
-    reqUrl = config.get('server','discover_uri')+'/iot/alive/'+deviceSN
+    reqUrl = Config.get('server','discover_uri')+'/iot/alive/'+deviceSN
     try:
-        response = requests.post(reqUrl,data=aliveInfo)
+        requests.post(reqUrl,data=aliveInfo)
         logger.info('完成报告。')
     except:
         logger.error('心跳报告失败。')
@@ -444,17 +469,16 @@ def api_device_findDLNADevices():
 #查出所有已注册的设备
 @app.route('/api/device/all',methods = ['GET','POST'])
 def api_device_all():
-    global shopDevices
+    global ShopDevices
     if request.method == 'POST' :
         postData = request.data.decode()
         postDevices = json.loads(postData)["devices"]
         newDev = []
-        stopDevices = []
         deletedDevices = []
         #处理新增设备或被重新开启的设备
         for p in postDevices:
             existed = False
-            for o in shopDevices:
+            for o in ShopDevices:
                 if o["host"] == p["host"]:
                     existed = True
                     if o["state"] == "On" and p["state"] != "On":
@@ -466,7 +490,7 @@ def api_device_all():
             if not existed:
                 newDev.append(p)
         #处理被删除的设备，将它列和已删除设备。
-        for o in shopDevices:
+        for o in ShopDevices:
             existed = False
             for p in postDevices:
                 if p["host"] == o["host"]:
@@ -478,47 +502,48 @@ def api_device_all():
         for d in newDev:
             if d["state"] == "On":
                 _thread.start_new_thread(playMediaWorker,(d["host"],))
-        shopDevices = postDevices
+        ShopDevices = postDevices
         savePlayersConfig()
         #将删除设备停止播放
         for d in deletedDevices:
             if d["type"] == "Video" and d["protocol"]=="DLNA":
-                playCmd = pycmd + " ./dlnap.py --ip " + d["host"] + " --stop"
+                playCmd = PyCmd + " ./dlnap.py --ip " + d["host"] + " --stop"
                 logger.info("执行：" + playCmd)
                 os.system(playCmd)
+        loadPlaylist()
         return Response(status=200) 
     elif request.method == 'GET':
-        return json.dumps(shopDevices)
+        return json.dumps(ShopDevices)
 
 
 #获取指定节点的配置
 @app.route('/api/ltgbox/config/server',methods = ['GET'])
 def api_ltgbox_config_node():
-    nodesConfig = config.items('server')
+    nodesConfig = Config.items('server')
     nodesObj = {}
     for n in nodesConfig:
         nodesObj[n[0]]=n[1]
     return json.dumps(nodesObj)
 
 def startLTGBoxApp():
-    global stopApp 
-    if stopApp:
+    global StopApp 
+    if StopApp:
         return
     logger.info('重启应用')
-    restartbox = pycmd+' LTGBox0.py'
+    restartbox = PyCmd+' LTGBox0.py'
     os.system(restartbox)
-    stopApp = True
+    StopApp = True
 
 def updateDevice():
-    global sys_updating
-    if sys_updating:
+    global SysUpdating
+    if SysUpdating:
         return json.dumps({"error":"Sys is updating"})
     try:
-        sys_updating = True
+        SysUpdating = True
         gitPullCmd = 'git pull'
         os.system(gitPullCmd)
     finally:
-        sys_updating = False
+        SysUpdating = False
     _thread.start_new_thread(startLTGBoxApp,())
 
 @app.route('/api/ltgbox/restart',methods=['POST'])
@@ -535,7 +560,7 @@ def device_software_update():
 
 
 def runWebApp():
-    time.sleep(15)
+    time.sleep(30)
     app.run(host='0.0.0.0', port=5604)
 
 def checkUpdate():
@@ -556,12 +581,12 @@ def BackgroupTask():
     _thread.start_new_thread(downloadResource,())
     #定时检查升级
     schedule.every().day.at("02:00").do(checkUpdate)
-    for d in shopDevices:
+    for d in ShopDevices:
         if d["state"] == "On":
             _thread.start_new_thread(playMediaWorker,(d["host"],))
             pass
-    global stopApp
-    while not stopApp:
+    global StopApp
+    while not StopApp:
         schedule.run_pending()
         time.sleep(1)
 
@@ -571,7 +596,7 @@ if __name__ == '__main__':
     scanDLNADevices()
     _thread.start_new_thread(BackgroupTask,())
     _thread.start_new_thread(runWebApp,())
-    while not stopApp:
+    while not StopApp:
         time.sleep(1)
         pass
     logger.info("应用将在10秒后关闭")
