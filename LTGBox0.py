@@ -20,6 +20,7 @@ from urllib.request import urlopen
 from flask import Flask, url_for,jsonify
 from flask import request,Response
 from flask_cors import CORS
+from urllib.parse import quote
 app = Flask(__name__)
 CORS(app)
 from sqlalchemy import and_,or_,desc,asc
@@ -421,7 +422,7 @@ def playMediaWorker(deviceHost):
 
     logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
     if deviceInfo["protocol"] == "DLNA":
-        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort +mediafile["iotpath"] + mediafile["mediaid"] + mediafile["extension"]
+        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + quote(mediafile["iotpath"],'utf-8') + mediafile["mediaid"] + mediafile["extension"]
         playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
         logger.info("执行：" + playCmd)
         os.system(playCmd)
