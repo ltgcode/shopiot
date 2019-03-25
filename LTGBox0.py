@@ -601,6 +601,7 @@ def checkUpdate():
  
 #启动所有异步线程
 def BackgroupTask():
+    loadPlaylist()
     #检查媒体资源列表
     thread_checkPlayList()
     schedule.every(180).seconds.do(thread_checkPlayList)
