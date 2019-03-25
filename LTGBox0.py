@@ -43,7 +43,7 @@ LocalHttpPort = '8001'
 PyCmd = 'python'
 Config = configparser.ConfigParser()
 SysUpdating = False
-StopApp = False
+AppStopAction = "None"
 PlayListSet = {}
 
 
@@ -558,13 +558,11 @@ def api_ltgbox_config_node():
     return json.dumps(nodesObj)
 
 def startLTGBoxApp():
-    global StopApp 
-    if StopApp:
+    global AppStopAction 
+    if AppStopAction != "None":
         return
-    logger.info('重启应用')
-    restartbox = PyCmd+' LTGBox0.py'
-    os.system(restartbox)
-    StopApp = True
+    logger.info('等待重启应用')
+    AppStopAction = "Restart"
 
 def updateDevice():
     global SysUpdating
@@ -617,8 +615,8 @@ def BackgroupTask():
         if d["state"] == "On":
             _thread.start_new_thread(playMediaWorker,(d["host"],))
             pass
-    global StopApp
-    while not StopApp:
+    global AppStopAction
+    while AppStopAction == "None":
         schedule.run_pending()
         time.sleep(1)
 
@@ -629,10 +627,14 @@ if __name__ == '__main__':
         scanDLNADevices()
         _thread.start_new_thread(BackgroupTask,())
         _thread.start_new_thread(runWebApp,())
-        while not StopApp:
+        while AppStopAction == "None":
             time.sleep(1)
             pass
         logger.info("应用将在10秒后关闭")
         time.sleep(10)
+        if AppStopAction == "Restart":
+            logger.warning("应用重启中")
+            restartbox = PyCmd+' LTGBox0.py'
+            os.system(restartbox)
     except:
         logger.error("应用发生错误，程序中断")
