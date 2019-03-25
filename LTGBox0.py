@@ -277,11 +277,9 @@ def downloadResource():
         .first())
     if playlistTarget != None :
         logger.info("资源" + playlistTarget.filename + "准备下载中...")
-        url = ResourceHost + urllib.parse.quote(playlistTarget.urlpath) + urllib.parse.quote(playlistTarget.filename)
+        url = ResourceHost + quote(playlistTarget.urlpath) + quote(playlistTarget.filename)
         #本地文件夹
-        localPath = sys.path[0] + "/resources" + playlistTarget.iotpath
-        if os.path.exists(localPath) == False:
-            os.makedirs(localPath)
+        localPath = sys.path[0] + "/resources/"
         #本地文件路径
         localFile = localPath + playlistTarget.mediaid + playlistTarget.extension
         #检查本地文件是否已存在,如果存在则无需下载
@@ -422,13 +420,13 @@ def playMediaWorker(deviceHost):
 
     logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
     if deviceInfo["protocol"] == "DLNA":
-        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + quote(mediafile["iotpath"],'utf-8') + mediafile["mediaid"] + mediafile["extension"]
+        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
         playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
         logger.info("执行：" + playCmd)
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
         threadDuration +=2
-        localfilename = "resources"+mediafile["iotpath"] + mediafile["mediaid"] + mediafile["extension"]
+        localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
         logger.info("本机声卡播放："+localfilename)
         _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
