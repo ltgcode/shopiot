@@ -588,7 +588,7 @@ def api_ltgbox_restart():
 @app.route('/api/ltgbox/update',methods=['POST'])
 def device_software_update():
     logger.info("收到升级请求，开始执行升级")
-    _thread.start_new_thread(updateDevice)
+    _thread.start_new_thread(updateDevice,())
     return Response(status=200) 
 
 
@@ -597,7 +597,7 @@ def runWebApp():
     app.run(host='0.0.0.0', port=5604)
 
 def checkUpdate():
-    _thread.start_new_thread(updateDevice)
+    _thread.start_new_thread(updateDevice,())
  
 #启动所有异步线程
 def BackgroupTask():
