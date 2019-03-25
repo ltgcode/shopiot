@@ -62,9 +62,12 @@ if os.path.exists('./resources') == False:
 if os.path.exists('./log') == False:
     os.mkdir('log')
 
-if not os.path.exists(_LAST_UPDATE_):
+def resetUpdateCheckCode():
     with open(_LAST_UPDATE_,'w') as cf:
         cf.writelines('0')
+
+if not os.path.exists(_LAST_UPDATE_):
+    resetUpdateCheckCode()
 
 logging.config.fileConfig(fname='logger.conf', disable_existing_loggers=False)
 logger = logging.getLogger("mainlog")
@@ -539,6 +542,7 @@ def api_device_all():
                 playCmd = PyCmd + " ./dlnap.py --ip " + d["host"] + " --stop"
                 logger.info("执行：" + playCmd)
                 os.system(playCmd)
+        resetUpdateCheckCode()
         loadPlaylist()
         return Response(status=200) 
     elif request.method == 'GET':
