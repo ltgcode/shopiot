@@ -222,9 +222,7 @@ def checkPlayList():
     if localCheckCode == checkCode:
         logger.info("媒体列表未发现更新。")
         return
-    else:
-        with open(_LAST_UPDATE_,'w') as cf:
-            cf.writelines(checkCode)
+    
 
     #获取媒体列表
     logger.info("获取资源数据，资源地址："+PlaylistURI)
@@ -266,6 +264,8 @@ def checkPlayList():
         session.commit()
     diffFiles = list(set(playlistIds).difference(set(nflist)))
     loadPlaylist()
+    with open(_LAST_UPDATE_,'w') as cf:
+        cf.writelines(checkCode)
     logger.info("资源检查完成")
         
 # 下载数据库中未下载的资源
@@ -319,6 +319,7 @@ def downloadResource():
             logger.error("资源" + playlistTarget.filename + "下载发生错误")
             playlistTarget.status = 10
             playlistTarget.modifiedon = datetime.datetime.now()
+            time.sleep(5)
             _thread.start_new_thread(downloadResource,())
             return
         finfo = os.stat(localFile)
@@ -331,6 +332,7 @@ def downloadResource():
             logger.error("资源" + playlistTarget.filename + "下载失败")
             os.remove(localFile)
             playlistTarget.status = 10
+            time.sleep(1)
             playlistTarget.modifiedon = datetime.datetime.now()
         session2.commit()
         time.sleep(1)
@@ -529,10 +531,6 @@ def api_device_all():
                     break
             if not existed:
                 deletedDevices.append(o)
-        #为新增设备启动播放线程
-        for d in newDev:
-            if d["state"] == "On":
-                _thread.start_new_thread(playMediaWorker,(d["host"],))
         ShopDevices = postDevices
         savePlayersConfig()
         #将删除设备停止播放
@@ -542,7 +540,12 @@ def api_device_all():
                 logger.info("执行：" + playCmd)
                 os.system(playCmd)
         resetUpdateCheckCode()
+        checkPlayList()
         loadPlaylist()
+        #为新增设备启动播放线程
+        for d in newDev:
+            if d["state"] == "On":
+                _thread.start_new_thread(playMediaWorker,(d["host"],))
         return Response(status=200) 
     elif request.method == 'GET':
         return json.dumps(ShopDevices)
