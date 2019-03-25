@@ -26,6 +26,12 @@ from sqlalchemy import and_,or_,desc,asc
 import logging
 import logging.config
 
+#常量
+_SN_ = '000'
+_VERSION_ = '0.1.4'
+_CONFIGFILE_ = 'ltgbox.conf'
+_LAST_UPDATE_ = 'update.txt'
+
 # 初始化工作，获取配置
 ShopDevices= []
 PlaylistURI = ''
@@ -34,9 +40,6 @@ LocalHttpHost = ''
 UseLocalHost = False
 LocalHttpPort = '8001'
 PyCmd = 'python'
-_sn_ = '000'
-_version_ = '0.1.3'
-_configfile_ = 'ltgbox.conf'
 Config = configparser.ConfigParser()
 SysUpdating = False
 StopApp = False
@@ -59,6 +62,10 @@ if os.path.exists('./resources') == False:
 if os.path.exists('./log') == False:
     os.mkdir('log')
 
+if not os.path.exists(_LAST_UPDATE_):
+    with open(_LAST_UPDATE_,'w') as cf:
+        cf.writelines('0')
+
 logging.config.fileConfig(fname='logger.conf', disable_existing_loggers=False)
 logger = logging.getLogger("mainlog")
 
@@ -80,18 +87,18 @@ def initConfig():
     Config["players"]={
         'BoxAudioCard' : '{"name": "BoxAudioCard", "host": "127.0.0.1", "type": "Audio", "protocol": "AudioCard", "state": "On", "path": ["/"]}'
     }
-    with open(_configfile_, 'w') as configfile:
+    with open(_CONFIGFILE_, 'w') as configfile:
         Config.write(configfile)
 
-if os.path.exists(_configfile_) == False:
+if os.path.exists(_CONFIGFILE_) == False:
     initConfig()
 
 #载入配置。
 def loadConfig():
     logger.info("载入配置")
-    Config.read(_configfile_)
-    global _sn_  
-    _sn_ = Config.get("device","sn")
+    Config.read(_CONFIGFILE_)
+    global _SN_  
+    _SN_ = Config.get("device","sn")
     global PlaylistURI
     PlaylistURI = Config.get("server","playlist_uri")
     global ResourceHost
@@ -123,12 +130,12 @@ def scanDLNADevices():
 
 #保存配置
 def savePlayersConfig():
-    Config.read(_configfile_)
+    Config.read(_CONFIGFILE_)
     Config.remove_section("players")
     Config.add_section("players")
     for dinfo in ShopDevices:
         Config.set("players",dinfo["name"],json.dumps(dinfo))
-    with open(_configfile_, 'w') as f:
+    with open(_CONFIGFILE_, 'w') as f:
         Config.write(f)
 
 def resourceItemWorker(iotPath,resourceList):
@@ -196,10 +203,31 @@ def playPlanWorker(playlistPlan):
 
 #检查播入列表更新。
 def checkPlayList(): 
+    #检查是否有更新
+    checkFileURI = PlaylistURI+'.txt'
+    try:
+        checkRequest = requests.get(checkFileURI)
+    except:
+        logger.error("无法获取更新标记文本信息，请检查网络")
+    if checkRequest.status_code == 200:
+        checkCode = checkRequest.text
+    else:
+        logger.error("请求媒体更新标记失败")
+    with open(_LAST_UPDATE_,'r') as cf:
+        localCheckCode = cf.read()
+    if localCheckCode == checkCode:
+        logger.info("媒体列表未发现更新。")
+        return
+    else:
+        with open(_LAST_UPDATE_,'w') as cf:
+            cf.writelines(checkCode)
+
+    #获取媒体列表
     logger.info("获取资源数据，资源地址："+PlaylistURI)
     if PlaylistURI == '':
         logger.warning("未配置资料主机地址。")
         return
+    
     #注册新文件
     try:
         confRequest = requests.get(PlaylistURI)
@@ -251,7 +279,7 @@ def downloadResource():
         if os.path.exists(localPath) == False:
             os.makedirs(localPath)
         #本地文件路径
-        localFile = localPath + playlistTarget.playlistid + playlistTarget.extension
+        localFile = localPath + playlistTarget.mediaid + playlistTarget.extension
         #检查本地文件是否已存在,如果存在则无需下载
         if os.path.exists(localFile) :
             finfo = os.stat(localFile)
@@ -341,7 +369,8 @@ def loadPlaylist():
                 (dev["type"] == "Audio" and mfile.mediatype not in ('Audio')):
                 continue
             newplaylist.append({
-                'id':mfile.playlistid, 
+                'id':mfile.playlistid,
+                'mediaid':mfile.mediaid,
                 'filename':mfile.filename,
                 'iotpath':mfile.iotpath,
                 'extension':mfile.extension,
@@ -389,13 +418,13 @@ def playMediaWorker(deviceHost):
 
     logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
     if deviceInfo["protocol"] == "DLNA":
-        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort +mediafile["iotpath"] + mediafile["id"] + mediafile["extension"]
+        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort +mediafile["iotpath"] + mediafile["mediaid"] + mediafile["extension"]
         playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
         logger.info("执行：" + playCmd)
         os.system(playCmd)
     elif deviceInfo["protocol"] == "AudioCard":
         threadDuration +=2
-        localfilename = "resources"+mediafile["iotpath"] + mediafile["id"] + mediafile["extension"]
+        localfilename = "resources"+mediafile["iotpath"] + mediafile["mediaid"] + mediafile["extension"]
         logger.info("本机声卡播放："+localfilename)
         _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
     else:
@@ -447,7 +476,7 @@ def thread_scanDLNADevices():
 #获取程序名称和版本号
 @app.route('/',methods = ['GET'])
 def api_root():
-    boxInfo =  {'name' :'LTG ShopMBox','sn':_sn_,'version':_version_}
+    boxInfo =  {'name' :'LTG ShopMBox','sn':_SN_,'version':_VERSION_}
     return jsonify(boxInfo)
 
 #查找DLNA设备
@@ -592,12 +621,15 @@ def BackgroupTask():
 
 if __name__ == '__main__':
     #配置初始化
-    loadConfig()
-    scanDLNADevices()
-    _thread.start_new_thread(BackgroupTask,())
-    _thread.start_new_thread(runWebApp,())
-    while not StopApp:
-        time.sleep(1)
-        pass
-    logger.info("应用将在10秒后关闭")
-    time.sleep(10)
+    try:
+        loadConfig()
+        scanDLNADevices()
+        _thread.start_new_thread(BackgroupTask,())
+        _thread.start_new_thread(runWebApp,())
+        while not StopApp:
+            time.sleep(1)
+            pass
+        logger.info("应用将在10秒后关闭")
+        time.sleep(10)
+    except:
+        logger.error("应用发生错误，程序中断")
