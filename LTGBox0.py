@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.6'
+_VERSION_ = '0.1.5'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -455,8 +455,7 @@ def playMediaWorker(deviceHost):
 def iot_alive_report():
     deviceSN = Config.get("device","sn")
     try:
-        hostname = socket.gethostname()    
-        IPAddr = socket.gethostbyname(hostname)
+        IPAddr = getHostIP()
     except:
         logger.error('心跳报告,获取主机IP失败。')
         return
