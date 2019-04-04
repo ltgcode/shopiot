@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.5'
+_VERSION_ = '0.1.6'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -97,6 +97,13 @@ def initConfig():
 if os.path.exists(_CONFIGFILE_) == False:
     initConfig()
 
+def getHostIP():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip = s.getsockname()[0]
+    s.close()
+    return ip
+
 #载入配置。
 def loadConfig():
     logger.info("载入配置")
@@ -114,9 +121,7 @@ def loadConfig():
         LocalHttpHost = Config.get("server","localHttpHost")
     else:
         try:
-            hostname = socket.gethostname()    
-            IPAddr = socket.gethostbyname(hostname)
-            LocalHttpHost = IPAddr 
+            LocalHttpHost = getHostIP() 
         except:
             LocalHttpHost = Config.get("server","localHttpHost")
     global LocalHttpPort
