@@ -1,5 +1,6 @@
 
 #apt package
+apt-get update
 apt-get install nginx-core
 apt-get install python3
 apt-get install python3-pip
