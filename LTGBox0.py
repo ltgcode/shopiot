@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.7.1'
+_VERSION_ = '0.1.7.2'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -580,7 +580,7 @@ def api_ltgbox_config_node():
     for n in nodesConfig:
         nodesObj[n[0]]=n[1]
     return json.dumps(nodesObj)
-    
+
 #重启应用
 def startLTGBoxApp():
     global AppStopAction 
@@ -650,7 +650,6 @@ def BackgroupTask():
         time.sleep(1)
 
 if __name__ == '__main__':
-    global AppStopAction
     #配置初始化
     try:
         loadConfig()
