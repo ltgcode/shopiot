@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.5'
+_VERSION_ = '0.1.6'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -147,47 +147,49 @@ def savePlayersConfig():
     with open(_CONFIGFILE_, 'w') as f:
         Config.write(f)
 
+#处理播放列表项
 def resourceItemWorker(iotPath,resourceList):
     session = playlistdb.GetDbSession()
     idlist = []
     for item in resourceList:
-        item_id = item["id"]
-        idlist.append(item_id)
-        item_filename = item["filename"]
-        item_mediatype = item["mediatype"]
-        item_duration = item["duration"]
-        item_size = item["size"]
-        item_tag = item["tag"]
-        item_path = item["path"]
-        _ ,item_filename_ext = os.path.splitext(item_filename)
+        idlist.append(item["id"])
+        _ ,item_filename_ext = os.path.splitext(item["filename"])
         try:
             existitem = (session.query(playlistdb.PlayList)
-                                .filter(playlistdb.PlayList.mediaid == item_id)
+                                .filter(playlistdb.PlayList.mediaid == item["id"])
                                 .first())
             if existitem == None :
                 newplaylistid = uuid.uuid1().hex
                 newplaylistRow = playlistdb.PlayList(playlistid=newplaylistid,
-                           iotpath = iotPath,mediaid=item_id,
-                           filename = item_filename,extension= item_filename_ext,
-                           createdon = datetime.datetime.now(),tag = item_tag,
-                           modifiedon = datetime.datetime.now(),urlpath = item_path,
-                           status = 10,playcount=0,mediatype = item_mediatype,
-                           size = item_size ,duration = item_duration)
+                           iotpath = iotPath,mediaid=item["id"],
+                           filename = item["filename"],extension= item_filename_ext,
+                           createdon = datetime.datetime.now(),tag = item["tag"],
+                           modifiedon = datetime.datetime.now(),urlpath = item["path"],
+                           status = 10,playcount=0,mediatype = item["mediatype"],
+                           size = item["size"] ,duration = item["duration"])
                 session.add(newplaylistRow)
                 session.commit()
             else:
+                if existitem.filename != item["filename"]:
+                    existitem.filename = item["filename"]
+                if existitem.filename != item["path"]:
+                    existitem.filename = item["path"]
+                if existitem.iotPath != iotPath:
+                    existitem.iotpath = iotPath
+                if existitem.tag != item["duration"]:
+                    existitem.tag = item["duration"]
                 if existitem.status == 2:
                     existitem.status = 10
                 elif existitem.status in (1,20):
                     existitem.status = 0
                 session.commit()
-                logger.info("资源" + item_filename + "(" + item_id + ")已注册")
+                logger.info("资源" + item["filename"] + "(" + item["id"] + ")已注册")
         except:
-            logger.warning("资源验证失败：" + item_filename + "(" + item_id + ")")
+            logger.warning("资源验证失败：" + item["filename"] + "(" + item["id"] + ")")
     return idlist
     
 
-#处理获取到的播放列表。
+#处理获取到的播放路径
 def playPlanWorker(playlistPlan):
     #检查是否已存在该资源
     item_iotpath = playlistPlan["iotpath"]
@@ -251,6 +253,7 @@ def checkPlayList():
                 playlistIds = playlistIds + pfiles
     else:
         logger.warning("资源单获取失败")
+
     #处理已删除文件
     session = playlistdb.GetDbSession()
     notdelFiles = (session.query(playlistdb.PlayList)
@@ -461,7 +464,8 @@ def iot_alive_report():
         return
     aliveInfo ={
         'skey' : Config.get("device","skey"),
-        'lan_ip' :IPAddr
+        'lan_ip' :IPAddr,
+        'version': _VERSION_
     }
     reqUrl = Config.get('server','discover_uri')+'/iot/alive/'+deviceSN
     try:
