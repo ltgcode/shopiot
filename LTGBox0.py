@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.6'
+_VERSION_ = '0.1.7'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -278,6 +278,12 @@ def checkPlayList():
         
 # 下载数据库中未下载的资源
 def downloadResource():
+
+    #处理重启情况
+    if AppStopAction == "Restart":
+        time.sleep(10)
+        _thread.start_new_thread(downloadResource,())
+
     logger.info("查找需要下载的资源")
     session2 = playlistdb.GetDbSession()
     playlistTarget = (session2.query(playlistdb.PlayList)
@@ -407,6 +413,13 @@ def getNextMediaFile(devHost):
 
 #设备播放线程
 def playMediaWorker(deviceHost):
+
+    #处理重启情况
+    if AppStopAction == "Restart":
+        time.sleep(10)
+        _thread.start_new_thread(playMediaWorker,(deviceHost,))
+
+    #获取设备信息
     deviceInfo = None
     for dev in ShopDevices:
         if dev["host"] == deviceHost:
@@ -581,7 +594,7 @@ def updateDevice():
         return json.dumps({"error":"Sys is updating"})
     try:
         SysUpdating = True
-        gitPullCmd = 'git pull'
+        gitPullCmd = 'git fetch --all ;git reset --hard ; git pull'
         os.system(gitPullCmd)
     finally:
         SysUpdating = False
@@ -641,7 +654,6 @@ if __name__ == '__main__':
         _thread.start_new_thread(runWebApp,())
         while AppStopAction == "None":
             time.sleep(1)
-            pass
         logger.info("应用将在10秒后关闭")
         time.sleep(10)
         if AppStopAction == "Restart":
