@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.7.3'
+_VERSION_ = '0.1.8'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -172,8 +172,8 @@ def resourceItemWorker(iotPath,resourceList):
             else:
                 if existitem.filename != item["filename"]:
                     existitem.filename = item["filename"]
-                if existitem.filename != item["path"]:
-                    existitem.filename = item["path"]
+                if existitem.path != item["path"]:
+                    existitem.path = item["path"]
                 if existitem.iotPath != iotPath:
                     existitem.iotpath = iotPath
                 if existitem.tag != item["duration"]:
