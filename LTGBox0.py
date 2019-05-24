@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.8'
+_VERSION_ = '0.1.8.1'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -414,59 +414,61 @@ def getNextMediaFile(devHost):
 
 #设备播放线程
 def playMediaWorker(deviceHost):
-
     #处理重启情况
     if AppStopAction == "Restart":
         time.sleep(10)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
+    try:
+        #获取设备信息
+        deviceInfo = None
+        for dev in ShopDevices:
+            if dev["host"] == deviceHost:
+                deviceInfo = dev
+        if deviceInfo == None or deviceInfo["host"] != deviceHost:
+            return
+        if deviceInfo["state"] != "On":
+            logger.warning( deviceInfo["name"]+"设备已停用。")
+            return
+        logger.info("获取设备" + deviceInfo["host"] + "的播放列表")
+        
+        mediafile = getNextMediaFile(deviceHost)
+        if mediafile == None :
+            logger.info("设备" + deviceInfo["host"] + "无可播放的媒体资源")
+            time.sleep(30)
+            _thread.start_new_thread(playMediaWorker,(deviceHost,))
+            return
+        threadDuration = mediafile["duration"] / 1000 - 1
+        if threadDuration < 0:
+            threadDuration = 0
 
-    #获取设备信息
-    deviceInfo = None
-    for dev in ShopDevices:
-        if dev["host"] == deviceHost:
-            deviceInfo = dev
-    if deviceInfo == None or deviceInfo["host"] != deviceHost:
-        return
-    if deviceInfo["state"] != "On":
-        logger.warning( deviceInfo["name"]+"设备已停用。")
-        return
-    logger.info("获取设备" + deviceInfo["host"] + "的播放列表")
-    
-    mediafile = getNextMediaFile(deviceHost)
-    if mediafile == None :
-        logger.info("设备" + deviceInfo["host"] + "无可播放的媒体资源")
-        time.sleep(30)
+        logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
+        if deviceInfo["protocol"] == "DLNA":
+            localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
+            playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
+            logger.info("执行：" + playCmd)
+            os.system(playCmd)
+        elif deviceInfo["protocol"] == "AudioCard":
+            threadDuration +=2
+            localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
+            logger.info("本机声卡播放："+localfilename)
+            _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
+        else:
+            pass
+
+        session = playlistdb.GetDbSession()
+        targetRow = (session.query(playlistdb.PlayList)
+                    .filter(playlistdb.PlayList.playlistid == mediafile["id"])
+                    .first())
+        if targetRow != None:
+            targetRow.lastplaytime = datetime.datetime.now()
+            targetRow.playcount = targetRow.playcount+1
+            targetRow.modifiedon = datetime.datetime.now()
+            session.commit()
+        time.sleep(threadDuration)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
-        return
-    threadDuration = mediafile["duration"] / 1000 - 1
-    if threadDuration < 0:
-        threadDuration = 0
-
-    logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
-    if deviceInfo["protocol"] == "DLNA":
-        localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
-        playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
-        logger.info("执行：" + playCmd)
-        os.system(playCmd)
-    elif deviceInfo["protocol"] == "AudioCard":
-        threadDuration +=2
-        localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
-        logger.info("本机声卡播放："+localfilename)
-        _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
-    else:
-        pass
-
-    session = playlistdb.GetDbSession()
-    targetRow = (session.query(playlistdb.PlayList)
-                .filter(playlistdb.PlayList.playlistid == mediafile["id"])
-                .first())
-    if targetRow != None:
-        targetRow.lastplaytime = datetime.datetime.now()
-        targetRow.playcount = targetRow.playcount+1
-        targetRow.modifiedon = datetime.datetime.now()
-        session.commit()
-    time.sleep(threadDuration)
-    _thread.start_new_thread(playMediaWorker,(deviceHost,))
+    except:
+        time.sleep(5)
+        _thread.start_new_thread(playMediaWorker,(deviceHost,))
 
 
 def iot_alive_report():
