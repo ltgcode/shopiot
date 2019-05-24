@@ -176,8 +176,9 @@ def resourceItemWorker(iotPath,resourceList):
                     existitem.path = item["path"]
                 if existitem.iotPath != iotPath:
                     existitem.iotpath = iotPath
-                if existitem.tag != item["duration"]:
-                    existitem.tag = item["duration"]
+                if existitem.tag != item["tag"]:
+                    existitem.tag = item["tag"]
+                # status 状态：0 启用，1停用,2,已删除，20，待删除,10：待启用，11：准备中,
                 if existitem.status == 2:
                     existitem.status = 10
                 elif existitem.status in (1,20):
