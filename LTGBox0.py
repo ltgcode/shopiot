@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.9.0'
+_VERSION_ = '0.1.9.1'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -503,15 +503,16 @@ def playMediaWorker(deviceHost):
 
 
 def iot_alive_report():
+    global LocalHttpHost
     deviceSN = Config.get("device","sn")
     try:
-        IPAddr = getHostIP()
+        LocalHttpHost = getHostIP()
     except:
         logger.error('心跳报告,获取主机IP失败。')
         return
     aliveInfo ={
         'skey' : Config.get("device","skey"),
-        'lan_ip' :IPAddr,
+        'lan_ip' :LocalHttpHost,
         'version': _VERSION_
     }
     reqUrl = Config.get('server','discover_uri')+'/iot/alive/'+deviceSN
