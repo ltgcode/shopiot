@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.8.2'
+_VERSION_ = '0.1.9.0'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -140,6 +140,26 @@ def loadConfig():
 #定时检查DLNA设备
 def scanDLNADevices():
     os.system(PyCmd + " ./dlnap.py")
+
+#修正设备IP地址
+def fixDevices():
+    try:
+        dlist = dlnap.discover(timeout=20)
+    except:
+        logger.error("自动修复设备配置失败")
+        return 
+    changed = False
+    for sd in ShopDevices:
+        for dinfo in dlist:
+            if dinfo.name == sd["name"] and dinfo.ip != sd["host"]:
+                sd["host"] = dinfo.ip
+                changed = True
+            if dinfo.name != sd["name"] and dinfo.ip == sd["host"]:
+                sd["name"]  = dinfo.name
+                changed = True
+    if changed :
+        savePlayersConfig()
+    
 
 #保存配置
 def savePlayersConfig():
@@ -387,9 +407,9 @@ def loadPlaylist():
     for dev in ShopDevices:
         devPlaylist = None
         #获取当前的设备的播放列表
-        if dev["host"] not in PlayListSet:
-            PlayListSet[dev["host"]] = {'lastIndex':0,'playlist':[]}
-        devPlaylist = PlayListSet[dev["host"]]
+        if dev["name"] not in PlayListSet:
+            PlayListSet[dev["name"]] = {'lastIndex':0,'playlist':[]}
+        devPlaylist = PlayListSet[dev["name"]]
         newplaylist = []
         #遍历文件列表，获取需要播放的文件
         for mfile in playlist:
@@ -433,18 +453,18 @@ def playMediaWorker(deviceHost):
         #获取设备信息
         deviceInfo = None
         for dev in ShopDevices:
-            if dev["host"] == deviceHost:
+            if dev["name"] == deviceHost:
                 deviceInfo = dev
-        if deviceInfo == None or deviceInfo["host"] != deviceHost:
+        if deviceInfo == None or deviceInfo["name"] != deviceHost:
             return
         if deviceInfo["state"] != "On":
             logger.warning( deviceInfo["name"]+"设备已停用。")
             return
-        logger.info("获取设备" + deviceInfo["host"] + "的播放列表")
+        logger.info("获取设备" + deviceInfo["name"] + "的播放列表")
         
         mediafile = getNextMediaFile(deviceHost)
         if mediafile == None :
-            logger.info("设备" + deviceInfo["host"] + "无可播放的媒体资源")
+            logger.info("设备" + deviceInfo["name"] + "无可播放的媒体资源")
             time.sleep(30)
             _thread.start_new_thread(playMediaWorker,(deviceHost,))
             return
@@ -452,7 +472,7 @@ def playMediaWorker(deviceHost):
         if threadDuration < 0:
             threadDuration = 0
 
-        logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["host"] + ",执行时间：" + str(threadDuration) + "秒")
+        logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["name"] + ",执行时间：" + str(threadDuration) + "秒")
         if deviceInfo["protocol"] == "DLNA":
             localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
             playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
@@ -462,7 +482,7 @@ def playMediaWorker(deviceHost):
             threadDuration +=2
             localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
             logger.info("本机声卡播放："+localfilename)
-            _thread.start_new_thread(playMusic,(deviceInfo["host"], localfilename))
+            _thread.start_new_thread(playMusic,(deviceInfo["name"], localfilename))
         else:
             pass
 
@@ -522,7 +542,7 @@ def api_root():
 @app.route('/api/device/findDLNADevices',methods = ['GET'])
 def api_device_findDLNADevices():
     try:
-        dlist = dlnap.discover(timeout=3)
+        dlist = dlnap.discover(timeout=10)
     except:
         return Response(json.dumps([]))
     devInfos = []
@@ -580,7 +600,7 @@ def api_device_all():
         #为新增设备启动播放线程
         for d in newDev:
             if d["state"] == "On":
-                _thread.start_new_thread(playMediaWorker,(d["host"],))
+                _thread.start_new_thread(playMediaWorker,(d["name"],))
         return Response(status=200) 
     elif request.method == 'GET':
         return json.dumps(ShopDevices)
@@ -646,6 +666,9 @@ def BackgroupTask():
     #检查媒体资源列表
     thread_checkPlayList()
     schedule.every(180).seconds.do(thread_checkPlayList)
+    #修正设备IP
+    fixDevices()
+    schedule.every(5).minutes.do(fixDevices)
     #心跳报告
     thread_iot_aliveReport()
     schedule.every(30).seconds.do(thread_iot_aliveReport)
@@ -658,7 +681,7 @@ def BackgroupTask():
     schedule.every().day.at("02:00").do(checkUpdate)
     for d in ShopDevices:
         if d["state"] == "On":
-            _thread.start_new_thread(playMediaWorker,(d["host"],))
+            _thread.start_new_thread(playMediaWorker,(d["name"],))
             pass
     global AppStopAction
     while AppStopAction == "None":
