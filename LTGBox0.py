@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.8.1'
+_VERSION_ = '0.1.8.2'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -45,7 +45,6 @@ Config = configparser.ConfigParser()
 SysUpdating = False
 AppStopAction = "None"
 PlayListSet = {}
-
 
 #
 # Signal of Ctrl+C
@@ -106,6 +105,7 @@ def getHostIP():
 
 #载入配置。
 def loadConfig():
+    #载入配置
     logger.info("载入配置")
     Config.read(_CONFIGFILE_)
     global _SN_  
@@ -126,8 +126,12 @@ def loadConfig():
             LocalHttpHost = Config.get("server","localHttpHost")
     global LocalHttpPort
     UseLocalHost = Config.get("server","localHttpPort")
+    #Phthon命令
     global PyCmd
     PyCmd = Config.get("server","pycmd")
+    #清掉标记文件
+    resetUpdateCheckCode()
+    #初始扫描设备
     global ShopDevices
     for player in Config.items('players'):
         playerconfig = json.loads(player[1])
@@ -172,9 +176,9 @@ def resourceItemWorker(iotPath,resourceList):
             else:
                 if existitem.filename != item["filename"]:
                     existitem.filename = item["filename"]
-                if existitem.path != item["path"]:
-                    existitem.path = item["path"]
-                if existitem.iotPath != iotPath:
+                if existitem.urlpath != item["path"]:
+                    existitem.urlpath = item["path"]
+                if existitem.iotpath != iotPath:
                     existitem.iotpath = iotPath
                 if existitem.tag != item["tag"]:
                     existitem.tag = item["tag"]
@@ -183,6 +187,14 @@ def resourceItemWorker(iotPath,resourceList):
                     existitem.status = 10
                 elif existitem.status in (1,20):
                     existitem.status = 0
+                if existitem.status == 0:
+                     #本地文件夹
+                    localPath = sys.path[0] + "/resources/"
+                    #本地文件路径
+                    localFile = localPath + existitem.mediaid + existitem.extension
+                    #检查本地文件是否已存在,如果存在则无需下载
+                    if not os.path.exists(localFile) :
+                        existitem.status = 10
                 session.commit()
                 logger.info("资源" + item["filename"] + "(" + item["id"] + ")已注册")
         except:
@@ -221,6 +233,7 @@ def checkPlayList():
         checkRequest = requests.get(checkFileURI)
     except:
         logger.error("无法获取更新标记文本信息，请检查网络")
+        return
     if checkRequest.status_code == 200:
         checkCode = checkRequest.text
     else:
@@ -230,14 +243,11 @@ def checkPlayList():
     if localCheckCode == checkCode:
         logger.info("媒体列表未发现更新。")
         return
-    
-
     #获取媒体列表
     logger.info("获取资源数据，资源地址："+PlaylistURI)
     if PlaylistURI == '':
         logger.warning("未配置资料主机地址。")
         return
-    
     #注册新文件
     try:
         confRequest = requests.get(PlaylistURI)
@@ -279,7 +289,6 @@ def checkPlayList():
         
 # 下载数据库中未下载的资源
 def downloadResource():
-
     #处理重启情况
     if AppStopAction == "Restart":
         time.sleep(10)
@@ -377,10 +386,12 @@ def loadPlaylist():
             .order_by(playlistdb.PlayList.filename))
     for dev in ShopDevices:
         devPlaylist = None
+        #获取当前的设备的播放列表
         if dev["host"] not in PlayListSet:
             PlayListSet[dev["host"]] = {'lastIndex':0,'playlist':[]}
         devPlaylist = PlayListSet[dev["host"]]
         newplaylist = []
+        #遍历文件列表，获取需要播放的文件
         for mfile in playlist:
             if mfile.iotpath not in dev["path"]:
                 continue
@@ -626,6 +637,8 @@ def runWebApp():
 
 def checkUpdate():
     _thread.start_new_thread(updateDevice,())
+
+
  
 #启动所有异步线程
 def BackgroupTask():
