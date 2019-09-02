@@ -311,8 +311,9 @@ def checkPlayList():
 def downloadResource():
     #处理重启情况
     if AppStopAction == "Restart":
-        time.sleep(10)
-        _thread.start_new_thread(downloadResource,())
+        return
+        #time.sleep(10)
+        #_thread.start_new_thread(downloadResource,())
 
     logger.info("查找需要下载的资源")
     session2 = playlistdb.GetDbSession()
@@ -447,8 +448,9 @@ def getNextMediaFile(devHost):
 def playMediaWorker(deviceHost):
     #处理重启情况
     if AppStopAction == "Restart":
-        time.sleep(10)
-        _thread.start_new_thread(playMediaWorker,(deviceHost,))
+        #time.sleep(10)
+        #_thread.start_new_thread(playMediaWorker,(deviceHost,))
+        return
     try:
         #获取设备信息
         deviceInfo = None
