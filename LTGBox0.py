@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.9.1-1'
+_VERSION_ = '0.1.9.2'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 
@@ -50,8 +50,10 @@ PlayListSet = {}
 # Signal of Ctrl+C
 # =================================================================================================
 def signal_handler(signal, frame):
-   logger.info(' Got Ctrl + C, exit now!')
-   sys.exit(1)
+    global AppStopAction
+    AppStopAction = "Close"
+    logger.info(' Got Ctrl + C, exit now!')
+    sys.exit(1)
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -247,6 +249,9 @@ def playPlanWorker(playlistPlan):
 
 #检查播入列表更新。
 def checkPlayList(): 
+    global AppStopAction
+    if checkAppStopAction():
+        return
     #检查是否有更新
     checkFileURI = PlaylistURI+'.txt'
     try:
@@ -306,15 +311,19 @@ def checkPlayList():
     with open(_LAST_UPDATE_,'w') as cf:
         cf.writelines(checkCode)
     logger.info("资源检查完成")
+
+def checkAppStopAction():
+    if AppStopAction in ("Restart","Close"):
+        return True
+    else:
+        return False 
         
 # 下载数据库中未下载的资源
 def downloadResource():
     #处理重启情况
-    if AppStopAction == "Restart":
+    global AppStopAction
+    if checkAppStopAction():
         return
-        #time.sleep(10)
-        #_thread.start_new_thread(downloadResource,())
-
     logger.info("查找需要下载的资源")
     session2 = playlistdb.GetDbSession()
     playlistTarget = (session2.query(playlistdb.PlayList)
@@ -389,6 +398,9 @@ def downloadResource():
 
 # 播放MP3       
 def playMusic(audiocard,filename):
+    global AppStopAction
+    if checkAppStopAction():
+        return
     if audiocard is None or audiocard=='':
         os.system('mpg321 "'+filename+'"') 
     else:
@@ -400,6 +412,9 @@ def removeResourceFiles():
 
 #载入节目单
 def loadPlaylist():
+    global AppStopAction
+    if checkAppStopAction():
+        return
     session = playlistdb.GetDbSession()
     global PlayListSet
     playlist = (session.query(playlistdb.PlayList)
@@ -447,9 +462,8 @@ def getNextMediaFile(devHost):
 #设备播放线程
 def playMediaWorker(deviceHost):
     #处理重启情况
-    if AppStopAction == "Restart":
-        #time.sleep(10)
-        #_thread.start_new_thread(playMediaWorker,(deviceHost,))
+    global AppStopAction
+    if checkAppStopAction():
         return
     try:
         #获取设备信息
