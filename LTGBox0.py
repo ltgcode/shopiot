@@ -29,9 +29,10 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.9.2'
+_VERSION_ = '0.1.9.3'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
+DEFAULT_DRIVE = "./device/default.json"
 
 # 初始化工作，获取配置
 ShopDevices= []
@@ -44,6 +45,7 @@ PyCmd = 'python'
 Config = configparser.ConfigParser()
 SysUpdating = False
 AppStopAction = "None"
+NoADUntil = {}
 PlayListSet = {}
 
 #
@@ -461,10 +463,21 @@ def getNextMediaFile(devHost):
 
 #设备播放线程
 def playMediaWorker(deviceHost):
+
+    #检查是否到达禁播时间
+    global NoADUntil
+    if deviceHost in NoADUntil:
+        noadtime = NoADUntil[deviceHost]
+        if  datetime.datetime.now()< noadtime:
+            time.sleep(3)
+            _thread.start_new_thread(playMediaWorker,(deviceHost,))
+            return
+
     #处理重启情况
     global AppStopAction
     if checkAppStopAction():
         return
+
     try:
         #获取设备信息
         deviceInfo = None
@@ -526,10 +539,18 @@ def iot_alive_report():
     except:
         logger.error('心跳报告,获取主机IP失败。')
         return
+    devicesList = []
+    with open(DEFAULT_DRIVE,'r') as dfile:
+        ddata = dfile.read()
+        jdevices = json.loads(ddata)
+        for dinfo in jdevices:
+            devbaseInfo = {'name':dinfo["name"],'ip':dinfo["ip"]}
+            devicesList.append(devbaseInfo)
     aliveInfo ={
         'skey' : Config.get("device","skey"),
         'lan_ip' :LocalHttpHost,
-        'version': _VERSION_
+        'version': _VERSION_,
+        'devices': json.dumps( devicesList)
     }
     reqUrl = Config.get('server','discover_uri')+'/iot/alive/'+deviceSN
     try:
