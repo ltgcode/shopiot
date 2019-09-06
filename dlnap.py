@@ -462,6 +462,15 @@ class DlnapDevice:
        self._DlnapDevice__desc_xml = devinfo["_DlnapDevice__desc_xml"] 
        self._DlnapDevice__raw = devinfo["_DlnapDevice__raw"]
 
+   def loadByName(self,devname):
+      with open(DEFAULT_DRIVE,'r') as dfile:
+         ddata = dfile.read()
+         jdevices = json.loads(ddata)
+      for dinfo in jdevices:
+         if dinfo["name"] == devname:
+            self.loads(dinfo)
+            break
+
    def __repr__(self):
       return '{} @ {}'.format(self.name, self.ip)
 
@@ -521,6 +530,7 @@ class DlnapDevice:
       url -- media url
       instance_id -- device instance id
       """
+      #SetAVTransportURI
       packet = self._create_packet('SetAVTransportURI', {'InstanceID':instance_id, 'CurrentURI':url, 'CurrentURIMetaData':'' })
       _send_tcp((self.ip, self.port), packet)
 
@@ -683,7 +693,7 @@ def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_versio
              pass
    for dirviceitem  in devices:
        for edevice in devicesInfo:
-           if edevice["ip"] == dirviceitem.ip:
+           if edevice["name"] == dirviceitem.name:
                devicesInfo.remove(edevice)
        dinfo = {}
        dinfo["location"] = dirviceitem.location
@@ -863,7 +873,7 @@ if __name__ == '__main__':
        for dinfo in jdevices:
            if dinfo["ip"] == ip:
                 d.loads(dinfo)
-                pass
+                break
        if d is None:
           print('No compatible devices found.')
           sys.exit(1)

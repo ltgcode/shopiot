@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.9.4'
+_VERSION_ = '0.2.0.0'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 DEFAULT_DRIVE = "./device/default.json"
@@ -624,7 +624,10 @@ def remoteCommandsRunner():
         if "command" not in commandObj:
             return
         command = commandObj["command"]
-        cmdid = command["id"]
+        cmdid = commandObj["id"]
+        cmdStatus = commandObj["status"]
+        if cmdStatus != 0:
+            return
         if command == "Restart":
             updateRemoteCommandStatus(cmdid,'1')
             startLTGBoxApp()
@@ -632,8 +635,9 @@ def remoteCommandsRunner():
             updateRemoteCommandStatus(cmdid,'1')
             updateDevice()
         elif command == "Play":
-            cmddata = command["data"]
-            playToDevice(cmddata["devicename"],cmddata["url"])
+            cmddata = json.loads( commandObj["data"])
+            endtime =time.localtime(float(cmddata["endtime"]))
+            playToDevice(cmddata["devicename"],cmddata["url"],endtime)
             updateRemoteCommandStatus(cmdid,'1')
     except:
         logger.error('Remote command runner error.')
