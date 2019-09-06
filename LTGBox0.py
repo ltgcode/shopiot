@@ -29,12 +29,13 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.1.9.3'
+_VERSION_ = '0.1.9.4'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 DEFAULT_DRIVE = "./device/default.json"
 
 # 初始化工作，获取配置
+DiscoverURI = ''
 ShopDevices= []
 PlaylistURI = ''
 ResourceHost = ''
@@ -112,6 +113,8 @@ def loadConfig():
     #载入配置
     logger.info("载入配置")
     Config.read(_CONFIGFILE_)
+    global DiscoverURI
+    DiscoverURI = Config.get("server","discover_uri")
     global _SN_  
     _SN_ = Config.get("device","sn")
     global PlaylistURI
@@ -463,7 +466,6 @@ def getNextMediaFile(devHost):
 
 #设备播放线程
 def playMediaWorker(deviceHost):
-
     #检查是否到达禁播时间
     global NoADUntil
     if deviceHost in NoADUntil:
@@ -533,7 +535,6 @@ def playMediaWorker(deviceHost):
 
 def iot_alive_report():
     global LocalHttpHost
-    deviceSN = Config.get("device","sn")
     try:
         LocalHttpHost = getHostIP()
     except:
@@ -552,7 +553,7 @@ def iot_alive_report():
         'version': _VERSION_,
         'devices': json.dumps( devicesList)
     }
-    reqUrl = Config.get('server','discover_uri')+'/iot/alive/'+deviceSN
+    reqUrl = DiscoverURI+'/iot/alive/'+_SN_
     try:
         requests.post(reqUrl,data=aliveInfo)
         logger.info('完成报告。')
@@ -591,6 +592,52 @@ def api_device_findDLNADevices():
         }
         devInfos.append(ditem)
     return json.dumps(devInfos)
+
+def playToDevice(devicename,url,endtime):
+    device = dlnap.DlnapDevice(None,None)
+    device.loadByName(devicename)
+    tv = dlnap.DlnapDevice(device._DlnapDevice__raw.encode('utf-8'),device.ip)
+    NoADUntil[devicename] = endtime
+    tv.set_current_media(url)
+    tv.play()
+
+def updateRemoteCommandStatus(cmdid,status):
+    global DiscoverURI
+    reqUrl = DiscoverURI+'/iot/command/'+_SN_
+    reqData = {
+        'commandid':cmdid,
+        'status':status
+    }
+    try:
+        requests.put(reqUrl,data=reqData)
+        logger.info('完成命令状态更新'+cmdid+":status-"+str(status))
+    except:
+        logger.error('完成命令状态更新失败。')
+    pass
+
+def remoteCommandsRunner():
+    global DiscoverURI
+    reqUrl = DiscoverURI+'/iot/command/'+_SN_
+    try:
+        res = requests.get(reqUrl)
+        commandObj = json.loads(res.text)
+        if "command" not in commandObj:
+            return
+        command = commandObj["command"]
+        cmdid = command["id"]
+        if command == "Restart":
+            updateRemoteCommandStatus(cmdid,'1')
+            startLTGBoxApp()
+        elif command =="UpdateApp":
+            updateRemoteCommandStatus(cmdid,'1')
+            updateDevice()
+        elif command == "Play":
+            cmddata = command["data"]
+            playToDevice(cmddata["devicename"],cmddata["url"])
+            updateRemoteCommandStatus(cmdid,'1')
+    except:
+        logger.error('Remote command runner error.')
+    pass
 
 #查出所有已注册的设备
 @app.route('/api/device/all',methods = ['GET','POST'])
@@ -710,6 +757,8 @@ def BackgroupTask():
     #心跳报告
     thread_iot_aliveReport()
     schedule.every(30).seconds.do(thread_iot_aliveReport)
+    #远程命令
+    schedule.every(10).seconds.do(remoteCommandsRunner)
     #DLNA设备查找
     thread_scanDLNADevices()
     schedule.every(10).minutes.do(thread_scanDLNADevices)
