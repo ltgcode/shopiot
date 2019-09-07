@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.2.0.0'
+_VERSION_ = '0.2.0.1'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 DEFAULT_DRIVE = "./device/default.json"
@@ -470,7 +470,7 @@ def playMediaWorker(deviceHost):
     global NoADUntil
     if deviceHost in NoADUntil:
         noadtime = NoADUntil[deviceHost]
-        if  datetime.datetime.now()< noadtime:
+        if  datetime.datetime.now().timetuple() < noadtime:
             time.sleep(3)
             _thread.start_new_thread(playMediaWorker,(deviceHost,))
             return
@@ -506,9 +506,16 @@ def playMediaWorker(deviceHost):
         logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["name"] + ",执行时间：" + str(threadDuration) + "秒")
         if deviceInfo["protocol"] == "DLNA":
             localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
-            playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
-            logger.info("执行：" + playCmd)
-            os.system(playCmd)
+            #playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
+            #--start--
+            devinfo = dlnap.DlnapDevice(None,None)
+            devinfo.loadByName(deviceHost)
+            tv = dlnap.DlnapDevice( devinfo._DlnapDevice__raw.encode('utf-8'),devinfo.ip)
+            tv.set_current_media(localfilename)
+            tv.play()
+            #--end--
+            #logger.info("执行：" + playCmd)
+            #os.system(playCmd.encode("UTF-8"))
         elif deviceInfo["protocol"] == "AudioCard":
             threadDuration +=2
             localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
@@ -635,8 +642,8 @@ def remoteCommandsRunner():
             updateRemoteCommandStatus(cmdid,'1')
             updateDevice()
         elif command == "Play":
-            cmddata = json.loads( commandObj["data"])
-            endtime =time.localtime(float(cmddata["endtime"]))
+            cmddata = json.loads(commandObj["data"])
+            endtime =time.strptime(cmddata["endtime"],'%Y-%m-%dT%H:%M:%S')
             playToDevice(cmddata["devicename"],cmddata["url"],endtime)
             updateRemoteCommandStatus(cmdid,'1')
     except:
