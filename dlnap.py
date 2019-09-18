@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 # @file dlnap.py
 # @author cherezov.pavel@gmail.com
@@ -60,14 +61,12 @@ URN_RenderingControl = "urn:schemas-upnp-org:service:RenderingControl:1"
 URN_RenderingControl_Fmt = "urn:schemas-upnp-org:service:RenderingControl:{}"
 
 SSDP_ALL = "ssdp:all"
-DEFAULT_DRIVE = "./device/default.json"
-
+devList = {}
 # =================================================================================================
 # XML to DICT
 #
 def _get_tag_value(x, i = 0):
    """ Get the nearest to 'i' position xml tag name.
-
    x -- xml string
    i -- position to start searching tag from
    return -- (tag, value) pair.
@@ -136,7 +135,6 @@ def _get_tag_value(x, i = 0):
 def _xml2dict(s, ignoreUntilXML = False):
 
    """ Convert xml to dictionary.
-
    <?xml version="1.0"?>
    <a any_tag="tag value">
       <b> <bb>value1</bb> </b>
@@ -147,9 +145,7 @@ def _xml2dict(s, ignoreUntilXML = False):
       </d>
       <g>value</g>
    </a>
-
    =>
-
    { 'a':
      {
          'b': [ {'bb':value1}, {'bb':value2} ],
@@ -186,7 +182,6 @@ s = """
    hello
    this is a bad
    strings
-
    <?xml version="1.0"?>
    <a any_tag="tag value">
       <b><bb>value1</bb></b>
@@ -201,7 +196,6 @@ s = """
 
 def _xpath(d, path):
    """ Return value from xml dictionary at path.
-
    d -- xml dictionary
    path -- string path like root/device/serviceList/service@serviceType=URN_AVTransport/controlURL
    return -- value at path or None if path not found
@@ -314,7 +308,6 @@ def runProxy(ip = '', port = 8000):
 
 def _get_port(location):
    """ Extract port number from url.
-
    location -- string like http://anyurl:port/whatever/path
    return -- port number
    """
@@ -324,7 +317,6 @@ def _get_port(location):
 
 def _get_control_url(xml, urn):
    """ Extract AVTransport contol url from device description xml
-
    xml -- device description xml
    return -- control url or empty string if wasn't found
    """
@@ -333,7 +325,6 @@ def _get_control_url(xml, urn):
 @contextmanager
 def _send_udp(to, packet):
    """ Send UDP message to group
-
    to -- (host, port) group to send the packet to
    packet -- message to send
    """
@@ -349,7 +340,6 @@ def _unescape_xml(xml):
 
 def _send_tcp(to, payload):
    """ Send TCP message to group
-
    to -- (host, port) group to send to payload to
    payload -- message to send
    """
@@ -375,19 +365,18 @@ def _send_tcp(to, payload):
 
 
 def _get_location_url(raw):
-    """ Extract device description url from discovery response
-
-    raw -- raw discovery response
-    return -- location url string
-    """
-    t = re.findall('\n(?i)location:\s*(.*)\r\s*', raw, re.M)
-    if len(t) > 0:
-        return t[0]
-    return ''
+   """ Extract device description url from discovery response
+   raw -- raw discovery response
+   return -- location url string
+   """
+   #t = re.findall('\n(?i)location:\s*(.*)\r\s*', raw, re.M)
+   t = re.findall('(?i)location:\s*(.*)\r\s*', raw, re.M)
+   if len(t) > 0:
+      return t[0]
+   return ''
 
 def _get_friendly_name(xml):
    """ Extract device name from description xml
-
    xml -- device description xml
    return -- device name
    """
@@ -423,34 +412,36 @@ class DlnapDevice:
       self.rendering_control_url = None
       self.has_av_transport = False
 
-      if raw != None:
-        try:
-            self.__raw = raw.decode()
-            self.location = _get_location_url(self.__raw)
-            self.__logger.info('location: {}'.format(self.location))
+      if raw == None :
+         return
 
-            self.port = _get_port(self.location)
-            self.__logger.info('port: {}'.format(self.port))
+      try:
+         self.__raw = raw.decode()
+         self.location = _get_location_url(self.__raw)
+         self.__logger.info('location: {}'.format(self.location))
 
-            raw_desc_xml = urlopen(self.location).read().decode()
+         self.port = _get_port(self.location)
+         self.__logger.info('port: {}'.format(self.port))
 
-            self.__desc_xml = _xml2dict(raw_desc_xml)
-            self.__logger.debug('description xml: {}'.format(self.__desc_xml))
+         raw_desc_xml = urlopen(self.location).read().decode()
 
-            self.name = _get_friendly_name(self.__desc_xml)
-            self.__logger.info('friendlyName: {}'.format(self.name))
+         self.__desc_xml = _xml2dict(raw_desc_xml)
+         self.__logger.debug('description xml: {}'.format(self.__desc_xml))
 
-            self.control_url = _get_control_url(self.__desc_xml, URN_AVTransport)
-            self.__logger.info('control_url: {}'.format(self.control_url))
+         self.name = _get_friendly_name(self.__desc_xml)
+         self.__logger.info('friendlyName: {}'.format(self.name))
 
-            self.rendering_control_url = _get_control_url(self.__desc_xml, URN_RenderingControl)
-            self.__logger.info('rendering_control_url: {}'.format(self.rendering_control_url))
+         self.control_url = _get_control_url(self.__desc_xml, URN_AVTransport)
+         self.__logger.info('control_url: {}'.format(self.control_url))
 
-            self.has_av_transport = self.control_url is not None
-            self.__logger.info('=> Initialization completed'.format(ip))
-        except Exception as e:
-            self.__logger.warning('DlnapDevice (ip = {}) init exception:\n{}'.format(ip, traceback.format_exc()))
-    
+         self.rendering_control_url = _get_control_url(self.__desc_xml, URN_RenderingControl)
+         self.__logger.info('rendering_control_url: {}'.format(self.rendering_control_url))
+
+         self.has_av_transport = self.control_url is not None
+         self.__logger.info('=> Initialization completed'.format(ip))
+      except Exception as e:
+         self.__logger.warning('DlnapDevice (ip = {}) init exception:\n{}'.format(ip, traceback.format_exc()))
+
    def loads(self,devinfo):
        self.location = devinfo["location"] 
        self.port = devinfo["port"] 
@@ -463,13 +454,14 @@ class DlnapDevice:
        self._DlnapDevice__raw = devinfo["_DlnapDevice__raw"]
 
    def loadByName(self,devname):
-      with open(DEFAULT_DRIVE,'r') as dfile:
-         ddata = dfile.read()
-         jdevices = json.loads(ddata)
-      for dinfo in jdevices:
-         if dinfo["name"] == devname:
+        if devname in devList:
+            dinfo =  devList[devname]
             self.loads(dinfo)
-            break
+   
+   def loadByIp(self,ip):
+        if ip in devList:
+            dinfo =  devList[ip]
+            self.loads(dinfo)
 
    def __repr__(self):
       return '{} @ {}'.format(self.name, self.ip)
@@ -496,7 +488,6 @@ class DlnapDevice:
 
    def _create_packet(self, action, data):
       """ Create packet to send to device control url.
-
       action -- control action
       data -- dictionary with XML fields value
       """
@@ -526,17 +517,14 @@ class DlnapDevice:
 
    def set_current_media(self, url, instance_id = 0):
       """ Set media to playback.
-
       url -- media url
       instance_id -- device instance id
       """
-      #SetAVTransportURI
       packet = self._create_packet('SetAVTransportURI', {'InstanceID':instance_id, 'CurrentURI':url, 'CurrentURIMetaData':'' })
       _send_tcp((self.ip, self.port), packet)
 
    def play(self, instance_id = 0):
       """ Play media that was already set as current.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('Play', {'InstanceID': instance_id, 'Speed': 1})
@@ -544,7 +532,6 @@ class DlnapDevice:
 
    def pause(self, instance_id = 0):
       """ Pause media that is currently playing back.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('Pause', {'InstanceID': instance_id, 'Speed':1})
@@ -552,7 +539,6 @@ class DlnapDevice:
 
    def stop(self, instance_id = 0):
       """ Stop media that is currently playing back.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('Stop', {'InstanceID': instance_id, 'Speed': 1})
@@ -569,7 +555,6 @@ class DlnapDevice:
 
    def volume(self, volume=10, instance_id = 0):
       """ Stop media that is currently playing back.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('SetVolume', {'InstanceID': instance_id, 'DesiredVolume': volume, 'Channel': 'Master'})
@@ -587,7 +572,6 @@ class DlnapDevice:
 
    def mute(self, instance_id = 0):
       """ Stop media that is currently playing back.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('SetMute', {'InstanceID': instance_id, 'DesiredMute': '1', 'Channel': 'Master'})
@@ -595,7 +579,6 @@ class DlnapDevice:
 
    def unmute(self, instance_id = 0):
       """ Stop media that is currently playing back.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('SetMute', {'InstanceID': instance_id, 'DesiredMute': '0', 'Channel': 'Master'})
@@ -603,7 +586,6 @@ class DlnapDevice:
 
    def info(self, instance_id=0):
       """ Transport info.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('GetTransportInfo', {'InstanceID': instance_id})
@@ -611,7 +593,6 @@ class DlnapDevice:
 
    def media_info(self, instance_id=0):
       """ Media info.
-
       instance_id -- device instance id
       """
       packet = self._create_packet('GetMediaInfo', {'InstanceID': instance_id})
@@ -635,16 +616,12 @@ class DlnapDevice:
 
 def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_version = 1):
    """ Discover UPnP devices in the local network.
-
    name -- name or part of the name to filter devices
    timeout -- timeout to perform discover
    st -- st field of discovery packet
    mx -- mx field of discovery packet
    return -- list of DlnapDevice
    """
-   if not os.path.exists("./device"):
-       os.mkdir('device')
-
    st = st.format(ssdp_version)
    payload = "\r\n".join([
               'M-SEARCH * HTTP/1.1',
@@ -657,12 +634,6 @@ def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_versio
               '',
               ''])
    devices = []
-   devicesInfo =[]
-   if os.path.exists(DEFAULT_DRIVE):
-       with open(DEFAULT_DRIVE,'r') as dfile:
-               ddata = dfile.read()
-               devicesInfo = json.loads(ddata)
-
    with _send_udp(SSDP_GROUP, payload) as sock:
       start = time.time()
       while True:
@@ -691,10 +662,8 @@ def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_versio
          else:
              # Nothing to read
              pass
+   listChanged = False
    for dirviceitem  in devices:
-       for edevice in devicesInfo:
-           if edevice["name"] == dirviceitem.name:
-               devicesInfo.remove(edevice)
        dinfo = {}
        dinfo["location"] = dirviceitem.location
        dinfo["port"] = dirviceitem.port
@@ -705,9 +674,9 @@ def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_versio
        dinfo["ip"] = dirviceitem.ip
        dinfo["_DlnapDevice__desc_xml"] = dirviceitem._DlnapDevice__desc_xml 
        dinfo["_DlnapDevice__raw"] = dirviceitem._DlnapDevice__raw
-       devicesInfo.append(dinfo)
-   with open(DEFAULT_DRIVE,'w') as deviceData:
-       deviceData.write(json.dumps(devicesInfo))
+       devList[dinfo["name"]] = dinfo
+       devList[dinfo["ip"]] = dinfo
+       listChanged = True
    return devices
 
 #
@@ -852,28 +821,22 @@ if __name__ == '__main__':
 
    st = URN_AVTransport_Fmt if compatibleOnly else SSDP_ALL
    if not forceplay:
-       allDevices = discover(name=device, ip=ip, timeout=timeout, st=st, ssdp_version=ssdp_version)
-       if not allDevices:
-          print('No compatible devices found.')
-          sys.exit(1)
+      allDevices = discover(name=device, ip=ip, timeout=timeout, st=st, ssdp_version=ssdp_version)
+      if not allDevices:
+         print('No compatible devices found.')
+         sys.exit(1)
 
-       if action in ('', 'list'):
-          print('Discovered devices:')
-          for d in allDevices:
-             print(' {} {}'.format('[a]' if d.has_av_transport else '[x]', d))
-          sys.exit(0)
+      if action in ('', 'list'):
+         print('Discovered devices:')
+         for d in allDevices:
+            print(' {} {}'.format('[a]' if d.has_av_transport else '[x]', d))
+         sys.exit(0)
 
-       d = allDevices[0]
-       print(d)
+      d = allDevices[0]
+      print(d)
    else:
-       with open(DEFAULT_DRIVE,'r') as dfile:
-           ddata = dfile.read()
-           jdevices = json.loads(ddata)
        d = DlnapDevice(None,ip)
-       for dinfo in jdevices:
-           if dinfo["ip"] == ip:
-                d.loads(dinfo)
-                break
+       d.loadByIp(ip)
        if d is None:
           print('No compatible devices found.')
           sys.exit(1)
@@ -895,7 +858,7 @@ if __name__ == '__main__':
 
    if action == 'play':
       try:
-         #d.stop()
+         d.stop()
          url = 'http://{}:{}/{}'.format(ip, proxy_port, url) if proxy else url
          d.set_current_media(url=url)
          d.play()
