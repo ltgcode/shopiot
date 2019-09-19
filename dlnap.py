@@ -614,7 +614,7 @@ class DlnapDevice:
       pass
 
 
-def discover(name = '', ip = '', timeout = 1, st = SSDP_ALL, mx = 3, ssdp_version = 1):
+def discover(name = '', ip = '', timeout = 3, st = SSDP_ALL, mx = 3, ssdp_version = 1):
    """ Discover UPnP devices in the local network.
    name -- name or part of the name to filter devices
    timeout -- timeout to perform discover
@@ -753,7 +753,7 @@ if __name__ == '__main__':
    url = ''
    vol = 10
    position = '00:00:00'
-   timeout = 1
+   timeout = 3
    action = ''
    logLevel = logging.WARN
    compatibleOnly = True
