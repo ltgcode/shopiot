@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.2.0.1'
+_VERSION_ = '0.2.1.0'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 DEFAULT_DRIVE = "./device/default.json"
@@ -254,7 +254,6 @@ def playPlanWorker(playlistPlan):
 
 #检查播入列表更新。
 def checkPlayList(): 
-    global AppStopAction
     if checkAppStopAction():
         return
     #检查是否有更新
@@ -326,7 +325,6 @@ def checkAppStopAction():
 # 下载数据库中未下载的资源
 def downloadResource():
     #处理重启情况
-    global AppStopAction
     if checkAppStopAction():
         return
     logger.info("查找需要下载的资源")
@@ -403,7 +401,6 @@ def downloadResource():
 
 # 播放MP3       
 def playMusic(audiocard,filename):
-    global AppStopAction
     if checkAppStopAction():
         return
     if audiocard is None or audiocard=='':
@@ -411,13 +408,27 @@ def playMusic(audiocard,filename):
     else:
         os.system('mpg321 -o alsa -a '+audiocard +' "'+filename+'"') 
 
+def playVedio(devname,filename):
+    try:
+        devinfo = dlnap.DlnapDevice(None,None)
+        devinfo.loadByName(devname)
+        time.sleep(2)
+        devinfo.stop()
+        resData = devinfo.set_current_media_s(filename)
+        if resData == None :
+            dlnap.discover()
+        if resData.status_code != 200:
+            devinfo.set_current_media(filename)
+        devinfo.play()
+    except:
+        logger.error("视频播放出现错误"+filename)
+
 #清理资源文件
 def removeResourceFiles():
     pass
 
 #载入节目单
 def loadPlaylist():
-    global AppStopAction
     if checkAppStopAction():
         return
     session = playlistdb.GetDbSession()
@@ -476,7 +487,6 @@ def playMediaWorker(deviceHost):
             return
 
     #处理重启情况
-    global AppStopAction
     if checkAppStopAction():
         return
 
@@ -505,17 +515,10 @@ def playMediaWorker(deviceHost):
 
         logger.info("播放媒体文件" + mediafile["filename"] + "至" + deviceInfo["name"] + ",执行时间：" + str(threadDuration) + "秒")
         if deviceInfo["protocol"] == "DLNA":
+            threadDuration -= 2
             localfilename ="http://" +LocalHttpHost +":" +LocalHttpPort + "/"+ mediafile["mediaid"] + mediafile["extension"]
-            #playCmd = PyCmd + " ./dlnap.py --ip " + deviceInfo["host"] + " --play '" + localfilename + "'"
-            #--start--
-            devinfo = dlnap.DlnapDevice(None,None)
-            devinfo.loadByName(deviceHost)
-            tv = dlnap.DlnapDevice( devinfo._DlnapDevice__raw.encode('utf-8'),devinfo.ip)
-            tv.set_current_media(localfilename)
-            tv.play()
-            #--end--
-            #logger.info("执行：" + playCmd)
-            #os.system(playCmd.encode("UTF-8"))
+            logger.info("视频文件地址："+localfilename)
+            _thread.start_new_thread(playVedio,(deviceInfo["name"] , localfilename))
         elif deviceInfo["protocol"] == "AudioCard":
             threadDuration +=2
             localfilename = "resources/"+ mediafile["mediaid"] + mediafile["extension"]
