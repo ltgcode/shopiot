@@ -29,7 +29,7 @@ import logging.config
 
 #常量
 _SN_ = '000'
-_VERSION_ = '0.2.1.0'
+_VERSION_ = '0.2.2.0'
 _CONFIGFILE_ = 'ltgbox.conf'
 _LAST_UPDATE_ = 'update.txt'
 DEFAULT_DRIVE = "./device/default.json"
@@ -152,8 +152,8 @@ def scanDLNADevices():
 def fixDevices():
     try:
         dlist = dlnap.discover(timeout=20)
-    except:
-        logger.error("自动修复设备配置失败")
+    except Exception as err:
+        logger.error("自动修复设备配置失败,%s",err)
         return 
     changed = False
     for sd in ShopDevices:
@@ -224,8 +224,8 @@ def resourceItemWorker(iotPath,resourceList):
                         existitem.status = 10
                 session.commit()
                 logger.info("资源" + item["filename"] + "(" + item["id"] + ")已注册")
-        except:
-            logger.warning("资源验证失败：" + item["filename"] + "(" + item["id"] + ")")
+        except Exception as err:
+            logger.warning("资源验证失败：" + item["filename"] + "(" + item["id"] + "),%s",err)
     return idlist
     
 
@@ -260,8 +260,8 @@ def checkPlayList():
     checkFileURI = PlaylistURI+'.txt'
     try:
         checkRequest = requests.get(checkFileURI)
-    except:
-        logger.error("无法获取更新标记文本信息，请检查网络")
+    except Exception as err:
+        logger.error("无法获取更新标记文本信息，请检查网络.%s",err)
         return
     if checkRequest.status_code == 200:
         checkCode = checkRequest.text
@@ -280,8 +280,8 @@ def checkPlayList():
     #注册新文件
     try:
         confRequest = requests.get(PlaylistURI)
-    except:
-        logger.error("无法获取播放资源")
+    except Exception as err:
+        logger.error("无法获取播放资源.%s",err)
         return
     playlistIds = []
     if confRequest.status_code == 200 :
@@ -353,8 +353,8 @@ def downloadResource():
                 #处理未下载完成的任务
                 try:
                     os.remove(localFile)
-                except:
-                    logger.warning("文件" + localFile + "已存在，下载未完成，但无法访问。")
+                except Exception as err:
+                    logger.warning("文件" + localFile + "已存在，下载未完成，但无法访问。%s",err)
                     time.sleep(5)
                     _thread.start_new_thread(downloadResource,())
                     return
@@ -372,8 +372,8 @@ def downloadResource():
                     if chunk:
                         wfile.write(chunk)
                 wfile.close()
-        except:
-            logger.error("资源" + playlistTarget.filename + "下载发生错误")
+        except Exception as err:
+            logger.error("资源" + playlistTarget.filename + "下载发生错误.%s",err)
             playlistTarget.status = 10
             playlistTarget.modifiedon = datetime.datetime.now()
             time.sleep(5)
@@ -420,8 +420,8 @@ def playVedio(devname,filename):
         if resData.status_code != 200:
             devinfo.set_current_media(filename)
         devinfo.play()
-    except:
-        logger.error("视频播放出现错误"+filename)
+    except Exception as err:
+        logger.error("视频播放出现错误"+filename+".%s",err)
 
 #清理资源文件
 def removeResourceFiles():
@@ -538,7 +538,8 @@ def playMediaWorker(deviceHost):
             session.commit()
         time.sleep(threadDuration)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
-    except:
+    except Exception as err:
+        logger.error( deviceHost+ ",播放媒体出错。%s",err)
         time.sleep(5)
         _thread.start_new_thread(playMediaWorker,(deviceHost,))
 
@@ -547,8 +548,8 @@ def iot_alive_report():
     global LocalHttpHost
     try:
         LocalHttpHost = getHostIP()
-    except:
-        logger.error('心跳报告,获取主机IP失败。')
+    except Exception as err:
+        logger.error('心跳报告,获取主机IP失败。%s',err)
         return
     devicesList = []
     with open(DEFAULT_DRIVE,'r') as dfile:
@@ -567,8 +568,8 @@ def iot_alive_report():
     try:
         requests.post(reqUrl,data=aliveInfo)
         logger.info('完成报告。')
-    except:
-        logger.error('心跳报告失败。')
+    except Exception as err:
+        logger.error('心跳报告失败。%s',err)
     return
 
 def thread_checkPlayList():
@@ -621,9 +622,9 @@ def updateRemoteCommandStatus(cmdid,status):
     try:
         requests.put(reqUrl,data=reqData)
         logger.info('完成命令状态更新'+cmdid+":status-"+str(status))
-    except:
-        logger.error('完成命令状态更新失败。')
-    pass
+    except Exception as err:
+        logger.error('完成命令状态更新失败。%s',err)
+    
 
 def remoteCommandsRunner():
     global DiscoverURI
@@ -649,8 +650,8 @@ def remoteCommandsRunner():
             endtime =time.strptime(cmddata["endtime"],'%Y-%m-%dT%H:%M:%S')
             playToDevice(cmddata["devicename"],cmddata["url"],endtime)
             updateRemoteCommandStatus(cmdid,'1')
-    except:
-        logger.error('Remote command runner error.')
+    except Exception as err:
+        logger.error('Remote command runner error.%s',err)
     pass
 
 #查出所有已注册的设备
@@ -800,5 +801,5 @@ if __name__ == '__main__':
             time.sleep(1)
         logger.info("应用将在10秒后关闭")
         time.sleep(10)
-    except:
-        logger.error("应用发生错误，程序中断")
+    except Exception as err:
+        logger.error("应用发生错误，程序中断.%s",err)
