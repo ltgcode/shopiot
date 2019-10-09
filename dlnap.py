@@ -82,7 +82,11 @@ def initDevList():
    else:
       global devList
       with open(DL_FILE) as json_data:
-         devList = json.load(json_data)
+         try:
+            devList = json.load(json_data)
+         except Exception:
+            os.remove(DL_FILE)
+            return
       for key in devList:
          item = devList[key]
          item["updatedon"] = time.strptime( item["updatedon"] ,'%Y-%m-%dT%H:%M:%S')
@@ -766,12 +770,10 @@ def discover(name = '', ip = '', timeout = 3, st = SSDP_ALL, mx = 3, ssdp_versio
       changed = False
       if dinfo["name"] in devList:
          currDev =  devList[dinfo["name"]]
-         if currDev["control_url"] == None or currDev["control_url"] == "":
+         if dinfo["control_url"] != None and dinfo["control_url"] != "":
             devList[dinfo["name"]] = dinfo
             changed = True
-         elif dinfo["control_url"] == None or dinfo["control_url"] == "":
-            continue
-         if currDev["control_url"] == None or currDev["control_url"] == "":
+         elif currDev["control_url"] == None or currDev["control_url"] == "":
             devList[dinfo["name"]] = dinfo
             changed = True
          elif dinfo["control_url"] == None or dinfo["control_url"] == "":
@@ -781,12 +783,10 @@ def discover(name = '', ip = '', timeout = 3, st = SSDP_ALL, mx = 3, ssdp_versio
          changed = True
       if dinfo["ip"] in devList:
          currDev = devList[dinfo["ip"]] 
-         if currDev["control_url"] == None or currDev["control_url"] == "":
+         if dinfo["control_url"] != None and dinfo["control_url"] != "":
             devList[dinfo["ip"]] = dinfo
             changed = True
-         elif dinfo["control_url"] == None or dinfo["control_url"] == "":
-            continue
-         if currDev["control_url"] == None or currDev["control_url"] == "":
+         elif currDev["control_url"] == None or currDev["control_url"] == "":
             devList[dinfo["ip"]] = dinfo
             changed = True
          elif dinfo["control_url"] == None or dinfo["control_url"] == "":
